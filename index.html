@@ -408,7 +408,7 @@ const state = {
   bookmarks: JSON.parse(localStorage.getItem('reader-bookmarks') || '[]'),
   sources: JSON.parse(localStorage.getItem('reader-sources') || 'null') || defaultSources(),
   selectedArticle: null,
-  selectedReview: null,
+
   showSearch: false,
   digestOpen: false,
   digestText: null,
@@ -418,7 +418,8 @@ const state = {
   archive: null, archiveLoading: false, archiveStep: 0,
   weather: null, weatherTs: 0,
   reviewsLoading: false,
-  reviewsFailed: false,
+  reviewArticles: [],
+
   richContent: null, richLoading: false, richImages: [],
   fetchSource: null, // 'full' | 'rss' | 'fail'
   // Sources UI
@@ -508,7 +509,7 @@ function defaultSources() {
 
 const CATEGORIES = ['For You','Tech','Australia','Sport','Photo','World','Auto','Reviews'];
 const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
-const APP_VERSION = 'V20';
+const APP_VERSION = 'V21';
 
 // Post-render: hide decorative images (quote marks, ornaments) based on loaded dimensions
 function cleanupLoadedImages(container) {
@@ -690,30 +691,7 @@ function processNodes(nodes, opts = {}) {
   return { html: clean, images };
 }
 
-// Unified Anthropic API caller — routes through our Cloudflare Worker proxy
-// The Anthropic API does NOT support browser CORS, so we MUST proxy through our worker.
-// If the worker isn't deployed, this will fail gracefully (no infinite loops).
-async function callClaude(prompt, { maxTokens = 600, webSearch = false } = {}) {
-  try {
-    const body = { model:'claude-sonnet-4-20250514', max_tokens: maxTokens,
-      messages:[{role:'user', content: prompt}] };
-    if (webSearch) body.tools = [{type:'web_search_20250305', name:'web_search'}];
-    
-    // Route through our Cloudflare Worker API proxy endpoint
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000); // 30s for AI calls
-    const r = await fetch('/api/claude', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!r.ok) return null;
-    const d = await r.json();
-    return (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim() || null;
-  } catch(e) { console.warn('callClaude failed (deploy worker.js to enable):', e.message); return null; }
-}
+// Anthropic API removed — all features work without it
 
 function postProcessHtml(html) {
   if (!html) return html;
@@ -974,37 +952,50 @@ function diversify(articles) {
 async function fetchRSS() {
   const enabled = state.sources.filter(s => s.on);
   const all = [];
-  const results = await Promise.allSettled(enabled.map(async src => {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10000);
-      const res = await fetch(RSS2JSON + encodeURIComponent(src.feed), { signal: controller.signal });
-      clearTimeout(timer);
-      if (!res.ok) return [];
-      const data = await res.json();
-      if (data.status !== 'ok' || !data.items) return [];
-      return data.items.slice(0, 8).map((item, i) => ({
-        id: `${src.id}-${i}`,
-        title: item.title || 'Untitled',
-        excerpt: stripHtml(item.description || item.content || '').slice(0, 300),
-        content: item.content || item.description || '',
-        rssHtml: item.content || item.description || '',
-        author: item.author || src.name,
-        date: fmtDate(item.pubDate),
-        rawDate: item.pubDate,
-        time: timeAgo(item.pubDate),
-        source: src.name,
-        sourceDomain: src.domain,
-        category: src.cat,
-        link: item.link || '#',
-        image: item.thumbnail || item.enclosure?.link || extractImg(item.description || item.content || '') || null,
-        readTime: readTime(item.content || item.description || ''),
-        topics: extractTopics(item.title || '', src.cat),
-        pw: src.pw || false,
-      }));
-    } catch { return []; }
-  }));
-  results.forEach(r => { if (r.status === 'fulfilled') all.push(...r.value); });
+  
+  // Batch requests to avoid rss2json 429 rate limits (max ~6 concurrent)
+  const BATCH_SIZE = 6;
+  for (let i = 0; i < enabled.length; i += BATCH_SIZE) {
+    const batch = enabled.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(batch.map(async src => {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 10000);
+        const res = await fetch(RSS2JSON + encodeURIComponent(src.feed), { signal: controller.signal });
+        clearTimeout(timer);
+        if (!res.ok) return [];
+        const data = await res.json();
+        if (data.status !== 'ok' || !data.items) return [];
+        return data.items.slice(0, 8).map((item, idx) => ({
+          id: `${src.id}-${idx}`,
+          title: item.title || 'Untitled',
+          excerpt: stripHtml(item.description || item.content || '').slice(0, 300),
+          content: item.content || item.description || '',
+          rssHtml: item.content || item.description || '',
+          author: item.author || src.name,
+          date: fmtDate(item.pubDate),
+          rawDate: item.pubDate,
+          time: timeAgo(item.pubDate),
+          source: src.name,
+          sourceDomain: src.domain,
+          category: src.cat,
+          link: item.link || '#',
+          image: item.thumbnail || item.enclosure?.link || extractImg(item.description || item.content || '') || null,
+          readTime: readTime(item.content || item.description || ''),
+          topics: extractTopics(item.title || '', src.cat),
+          pw: src.pw || false,
+        }));
+      } catch { return []; }
+    }));
+    results.forEach(r => { if (r.status === 'fulfilled') all.push(...r.value); });
+    // Render partial results so the UI updates progressively
+    if (all.length > 0 && i + BATCH_SIZE < enabled.length) {
+      state.articles = [...all].sort((a, b) => new Date(b.rawDate || 0) - new Date(a.rawDate || 0));
+      render();
+    }
+    // Small delay between batches to avoid rate limits
+    if (i + BATCH_SIZE < enabled.length) await new Promise(r => setTimeout(r, 400));
+  }
   all.sort((a, b) => new Date(b.rawDate || 0) - new Date(a.rawDate || 0));
   return all;
 }
@@ -1367,66 +1358,146 @@ async function runArchiveChain(url) {
 }
 
 // ============================================================
-// ANTHROPIC API
-// ============================================================
-async function fetchTldr(title, source) {
-  return callClaude(`Find and summarise this article in 2-3 concise sentences: "${title}" from ${source}. Be factual and brief.`, { maxTokens: 300, webSearch: true });
-}
-
-async function fetchDigest(articles) {
-  const hl = articles.slice(0,8).map((a,i) => `${i+1}. [${a.source}] ${a.title}`).join('\n');
-  return callClaude(`You are a concise news briefing writer. Given these headlines, write a 2-3 paragraph briefing that connects the key themes and tells the reader what matters right now. Be conversational but informative. No headers or bullets.\n\nHeadlines:\n${hl}\n\nRespond with just the briefing text.`, { maxTokens: 600 });
+// TL;DR and Digest — local only, no API needed
+function getTldr(article) {
+  return article.excerpt || stripHtml(article.content || article.rssHtml || '').slice(0, 300) || 'No summary available.';
 }
 
 // ============================================================
-// REVIEWS — Dynamic system, no hardcoded data
+// REVIEWS — RSS-based, no API key required
 // ============================================================
-let REVIEWS = JSON.parse(localStorage.getItem('athere-reviews') || 'null') || [];
-let BESTOF = JSON.parse(localStorage.getItem('athere-bestof') || 'null') || [];
-const REVIEWS_TTL = 12 * 60 * 60 * 1000; // 12 hours
-const REVIEWS_TS = parseInt(localStorage.getItem('athere-reviews-ts') || '0');
-const REVIEW_CATEGORIES = ['All','Phones','Laptops','Cameras','Audio','Gaming','Wearables'];
+const REVIEW_FEEDS = [
+  { name:'The Verge Reviews', feed:'https://www.theverge.com/rss/reviews/index.xml', cat:'Reviews' },
+  { name:'TechRadar Reviews', feed:'https://www.techradar.com/rss/reviews', cat:'Reviews' },
+  { name:'Tom\'s Guide Reviews', feed:'https://www.tomsguide.com/feeds/reviews', cat:'Reviews' },
+  { name:'Wired Gear', feed:'https://www.wired.com/feed/category/gear/latest/rss', cat:'Reviews' },
+  { name:'Ars Technica Reviews', feed:'https://feeds.arstechnica.com/arstechnica/gadgets', cat:'Reviews' },
+  { name:'GSMArena Reviews', feed:'https://www.gsmarena.com/rss-news-reviews.php3', cat:'Reviews' },
+  { name:'PCMag Reviews', feed:'https://www.pcmag.com/rss/reviews', cat:'Reviews' },
+  { name:'DPReview', feed:'https://www.dpreview.com/feeds/news.xml', cat:'Reviews' },
+];
+const REVIEW_CATEGORIES = ['All','Phones','Laptops','Cameras','Audio','Gaming','Wearables','Other'];
 let activeReviewCat = 'All';
 
-function getFilteredReviews() {
-  if (activeReviewCat === 'All') return REVIEWS;
-  return REVIEWS.filter(r => (r.category || '').toLowerCase() === activeReviewCat.toLowerCase());
+function categorizeReview(title) {
+  const t = (title||'').toLowerCase();
+  if (/\b(phone|smartphone|iphone|galaxy\s*s|pixel\s*\d|oneplus|nothing\s*phone|redmi|poco|moto)\b/.test(t)) return 'Phones';
+  if (/\b(laptop|macbook|thinkpad|notebook|chromebook|surface\s*(pro|laptop)|zenbook|xps|spectre)\b/.test(t)) return 'Laptops';
+  if (/\b(camera|lens|mirrorless|dslr|fujifilm|x-t|x100|nikon\s*z|canon\s*(r|eos)|sony\s*a[0-9]|lumix|sigma|leica|hasselblad|dpreview|photography)\b/.test(t)) return 'Cameras';
+  if (/\b(headphone|earbud|airpod|speaker|soundbar|dac|amp|audio|wf-|wh-|buds|earphone|sonos|bose|sennheiser|sony\s*wh)\b/.test(t)) return 'Audio';
+  if (/\b(console|ps5|playstation|xbox|switch|steam\s*deck|gpu|graphics\s*card|gaming\s*(mouse|keyboard|monitor|laptop|headset)|rtx|radeon|rog)\b/.test(t)) return 'Gaming';
+  if (/\b(watch|smartwatch|fitness|tracker|band|garmin|fitbit|apple\s*watch|galaxy\s*watch|ultra\s*2|ring)\b/.test(t)) return 'Wearables';
+  return 'Other';
 }
 
-async function fetchDynamicReviews() {
-  if (REVIEWS.length > 0 && Date.now() - REVIEWS_TS < REVIEWS_TTL) return;
-  if (state.reviewsLoading) return; // Already in progress
+function isReviewArticle(title) {
+  const t = (title||'').toLowerCase();
+  return /\breview\b|hands[- ]on|first look|vs\.?\s|compared|best\s+(phone|laptop|camera|headphone|earbud|gaming|watch|tablet|monitor|tv|speaker)|buyer'?s?\s*guide|top\s+\d+\s/.test(t);
+}
+
+async function fetchReviewFeeds() {
+  if (state.reviewsLoading) return;
   state.reviewsLoading = true;
-  state.reviewsFailed = false;
   if (state.activeCat === 'Reviews') render();
-  try {
-    const text = await callClaude(`Search for the 8-10 most recently reviewed tech products across these categories: smartphones, laptops, cameras, headphones/audio, gaming devices, and wearables. Focus on products reviewed in the last 2-3 months.
-
-For each product, find the consensus review score and key verdicts from major publications (The Verge, CNET, Tom's Guide, RTINGS, DPReview, TechRadar, Wired, etc).
-
-Return ONLY valid JSON (no markdown, no backticks):
-{"reviews":[{"id":"r1","title":"Product Name","subtitle":"One-line verdict","score":8.5,"category":"Phones","date":"Feb 2026","time":"2 weeks ago","pros":["pro1","pro2","pro3"],"cons":["con1","con2"],"scores":[{"pub":"The Verge","s":8.5,"v":"One sentence verdict","url":"https://url"}],"specs":[{"l":"Key Spec","v":"Value","d":"Detail"}],"summary":"2-3 sentence summary of consensus opinion.","verdict":"Clear buy/wait/skip recommendation."}],"bestof":[{"category":"Best Phone","pick":"Name","runner":"Runner Up","why":"Why in 1 sentence"},{"category":"Best Laptop","pick":"Name","runner":"Runner Up","why":"Why"},{"category":"Best Camera","pick":"Name","runner":"Runner Up","why":"Why"},{"category":"Best Headphones","pick":"Name","runner":"Runner Up","why":"Why"},{"category":"Best Gaming","pick":"Name","runner":"Runner Up","why":"Why"}]}
-
-Categories MUST be one of: Phones, Laptops, Cameras, Audio, Gaming, Wearables.
-Scores out of 10. Prices in AUD. Use real review URLs.`, { maxTokens: 4000, webSearch: true });
-    if (text) {
-      const clean = text.replace(/```json|```/g,'').trim();
-      const parsed = JSON.parse(clean);
-      if (parsed.reviews && parsed.reviews.length > 0) {
-        REVIEWS = parsed.reviews.map((r, i) => ({...r, id: r.id || `rd${i}`}));
-        BESTOF = parsed.bestof || [];
-        localStorage.setItem('athere-reviews', JSON.stringify(REVIEWS));
-        localStorage.setItem('athere-bestof', JSON.stringify(BESTOF));
-        localStorage.setItem('athere-reviews-ts', String(Date.now()));
-      } else {
-        state.reviewsFailed = true;
-      }
-    } else {
-      state.reviewsFailed = true;
-    }
-  } catch(e) { console.warn('Reviews fetch:', e); state.reviewsFailed = true; }
+  const results = [];
+  
+  // Helper: parse RSS XML into items
+  function parseRssXml(xml, sourceName) {
+    try {
+      const doc = new DOMParser().parseFromString(xml, 'text/xml');
+      const items = doc.querySelectorAll('item');
+      items.forEach(item => {
+        const title = item.querySelector('title')?.textContent || '';
+        const link = item.querySelector('link')?.textContent || '';
+        const desc = item.querySelector('description')?.textContent || '';
+        const content = item.querySelector('content\\:encoded')?.textContent || desc;
+        const pubDate = item.querySelector('pubDate')?.textContent || '';
+        // Try multiple image sources
+        const mediaContent = item.querySelector('media\\:content, media\\:thumbnail');
+        const enclosure = item.querySelector('enclosure');
+        let img = mediaContent?.getAttribute('url') || enclosure?.getAttribute('url') || extractImg(content || desc) || null;
+        if (img) img = fixImgUrl(img);
+        results.push({
+          id: 'rv-' + hashCode(title + sourceName),
+          title, link,
+          source: sourceName.replace(' Reviews','').replace(' Gear',''),
+          image: img,
+          time: timeAgo(pubDate),
+          date: pubDate,
+          description: stripHtml(desc || content).slice(0, 200),
+          reviewCat: categorizeReview(title),
+          isReview: true,
+        });
+      });
+    } catch(e) { console.warn('RSS XML parse error:', sourceName, e); }
+  }
+  
+  // Fetch via our proxy (XML) first, fallback to rss2json
+  const BATCH = 4;
+  for (let i = 0; i < REVIEW_FEEDS.length; i += BATCH) {
+    const batch = REVIEW_FEEDS.slice(i, i + BATCH);
+    await Promise.allSettled(batch.map(async (rf) => {
+      try {
+        // Try our own proxy first (returns raw XML)
+        const proxyUrl = `/proxy?url=${encodeURIComponent(rf.feed)}`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        let res = await fetch(proxyUrl, { signal: controller.signal });
+        clearTimeout(timer);
+        if (res.ok) {
+          const text = await res.text();
+          if (text.includes('<rss') || text.includes('<feed') || text.includes('<channel')) {
+            parseRssXml(text, rf.name);
+            return;
+          }
+        }
+      } catch {}
+      // Fallback: rss2json
+      try {
+        const r = await fetch(`${RSS2JSON}${encodeURIComponent(rf.feed)}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.status !== 'ok' || !d.items) return;
+        d.items.forEach(item => {
+          const title = item.title || '';
+          const img = item.thumbnail || item.enclosure?.link || extractImg(item.description || item.content || '') || null;
+          results.push({
+            id: 'rv-' + hashCode(title + rf.name),
+            title, link: item.link || '',
+            source: rf.name.replace(' Reviews','').replace(' Gear',''),
+            image: img ? fixImgUrl(img) : null,
+            time: timeAgo(item.pubDate), date: item.pubDate,
+            description: stripHtml(item.description || item.content || '').slice(0, 200),
+            reviewCat: categorizeReview(title), isReview: true,
+          });
+        });
+      } catch(e) { console.warn('Review feed error:', rf.name, e); }
+    }));
+    if (i + BATCH < REVIEW_FEEDS.length) await new Promise(r => setTimeout(r, 300));
+  }
+  
+  results.sort((a, b) => new Date(b.date) - new Date(a.date));
+  const seen = new Set();
+  state.reviewArticles = results.filter(r => {
+    const key = r.title.slice(0, 40).toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   state.reviewsLoading = false;
   render();
+}
+
+function hashCode(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36);
+}
+
+function getFilteredReviews() {
+  const all = state.reviewArticles || [];
+  if (activeReviewCat === 'All') return all;
+  return all.filter(r => r.reviewCat === activeReviewCat);
 }
 
 // ============================================================
@@ -1517,7 +1588,7 @@ function _doRender(){
   document.body.classList.toggle('dark-bg', state.darkMode);
   s.innerHTML=renderHeader()+renderCatTabs()+renderFeed()+renderNav();
   if(state.selectedArticle)s.innerHTML+=renderReadingView();
-  if(state.selectedReview)s.innerHTML+=renderReviewView();
+  // Review articles now open in normal reader view
   if(state.showSearch)s.innerHTML+=renderSearch();
   app().innerHTML='';
   app().appendChild(s);
@@ -1547,62 +1618,46 @@ function renderFeed(){
     if(state.loading){
       c=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div></div>`;
     } else if(state.activeCat==='Reviews'){
-      // NEVER call fetchDynamicReviews from inside render — that causes infinite loops
+      const revArticles = state.reviewArticles || [];
       
-      if(state.reviewsLoading && REVIEWS.length === 0){
-        c+=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div><div style="font-size:13px;color:var(--tt);margin-top:16px">Searching for trending reviews...</div><div style="font-size:11px;color:var(--tm);margin-top:4px">This may take a moment</div></div>`;
-      } else if(REVIEWS.length === 0){
-        // Either failed or never fetched — show manual load button
-        c+=`<div style="text-align:center;padding:60px 20px;color:var(--tt)"><div style="font-size:32px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:4px">${state.reviewsFailed ? 'Reviews unavailable' : 'No reviews loaded'}</div><div style="font-size:12px;margin-bottom:16px">${state.reviewsFailed ? 'Proxy required — deploy worker.js to enable' : 'Tap below to discover trending tech'}</div><button onclick="state.reviewsFailed=false;fetchDynamicReviews()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">${state.reviewsFailed ? '↻ Retry' : 'Load Reviews'}</button></div>`;
+      if(state.reviewsLoading && revArticles.length === 0){
+        c+=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div><div style="font-size:13px;color:var(--tt);margin-top:16px">Loading reviews from ${REVIEW_FEEDS.length} sources...</div></div>`;
+      } else if(revArticles.length === 0){
+        c+=`<div style="text-align:center;padding:60px 20px;color:var(--tt)"><div style="font-size:32px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:4px">No reviews yet</div><div style="font-size:12px;margin-bottom:16px">Tap refresh to load from review feeds</div><button onclick="fetchReviewFeeds()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Load Reviews</button></div>`;
       } else {
         // Category filter tabs
         c+=`<div class="cat-tabs" style="margin-bottom:16px">${REVIEW_CATEGORIES.map(cat=>`<button class="cat-tab${activeReviewCat===cat?' active':''}" data-reviewcat="${cat}">${cat}</button>`).join('')}</div>`;
         
-        // Best Of section (only on All tab)
-        if(activeReviewCat==='All' && BESTOF.length>0){
-          c+=`<div style="background:var(--bg-alt);border-radius:14px;padding:16px;margin-bottom:20px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:10px">🏆 Editor's Picks</div>`;
-          c+=BESTOF.map(b=>`<div style="display:flex;align-items:baseline;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--tt);min-width:90px;flex-shrink:0">${esc(b.category)}</div><div><span style="font-weight:600;font-size:13px;color:var(--text)">${esc(b.pick)}</span><span style="font-size:12px;color:var(--ts)"> · ${esc(b.why)}</span></div></div>`).join('');
-          c+=`</div>`;
-        }
-        
-        // Refresh + count
         const filtered = getFilteredReviews();
-        c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div class="section-label">${filtered.length} Review${filtered.length!==1?'s':''}</div><button onclick="localStorage.removeItem('athere-reviews');localStorage.removeItem('athere-reviews-ts');REVIEWS=[];BESTOF=[];state.reviewsFailed=false;fetchDynamicReviews()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">↻ Refresh</button></div>`;
+        c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div class="section-label">${filtered.length} article${filtered.length!==1?'s':''} from ${REVIEW_FEEDS.length} sources</div><button onclick="fetchReviewFeeds()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">↻ Refresh</button></div>`;
         
-        // Review cards as news-like feed
         if(filtered.length === 0){
           c+=`<div style="text-align:center;padding:40px 20px;color:var(--tt)">No reviews in ${activeReviewCat}</div>`;
         } else {
-          filtered.forEach((r, i) => {
-            const sc=r.score>=8.5?'var(--success)':r.score>=7?'var(--warn)':'var(--accent)';
-            const srcCount = (r.scores||[]).length;
-            if(i === 0) {
-              // Featured first review
-              c+=`<div class="review-card" data-review="${r.id}" style="margin-bottom:16px">
-                ${r.image?`<img class="review-img" src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none'">`:''}
-                <div style="display:flex;align-items:center;gap:8px;margin:12px 0 6px">
-                  <div class="review-score-pill" style="background:${sc}12;border:1px solid ${sc}25;color:${sc}">${r.score}/10</div>
-                  <span style="font-size:11px;color:var(--tt)">${esc(r.category||'')} · ${srcCount} source${srcCount!==1?'s':''} · ${esc(r.time||r.date||'')}</span>
+          // Featured first article
+          const f = filtered[0];
+          c+=`<div class="card-featured" data-reviewlink="${esc(f.link)}" style="cursor:pointer">
+            ${f.image?`<img class="card-img" src="${esc(f.image)}" alt="" loading="lazy" onerror="this.style.display='none'">`:''}
+            <div class="card-body"><div class="card-source">${esc(f.source)} · ${esc(f.reviewCat)} · ${esc(f.time)}</div>
+            <div class="card-title">${esc(f.title)}</div>
+            <div style="font-size:13px;color:var(--ts);margin-top:4px;line-height:1.4">${esc(f.description)}</div></div></div>`;
+          
+          // Rest as compact rows
+          filtered.slice(1).forEach(r => {
+            c+=`<div class="card-row" data-reviewlink="${esc(r.link)}" style="display:flex;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer">
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                  <span class="review-cat-badge" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)">${esc(r.reviewCat)}</span>
+                  <span style="font-size:11px;color:var(--tt)">${esc(r.source)} · ${esc(r.time)}</span>
                 </div>
-                <div class="review-title" style="font-size:20px;margin-bottom:4px">${esc(r.title)}</div>
-                <div class="review-subtitle">${esc(r.subtitle)}</div>
-              </div>`;
-            } else {
-              // Compact row cards
-              c+=`<div class="review-card card-row" data-review="${r.id}" style="display:flex;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer">
-                <div style="flex:1;min-width:0">
-                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-                    <div class="review-score-pill" style="background:${sc}12;border:1px solid ${sc}25;color:${sc};font-size:11px;padding:2px 7px">${r.score}</div>
-                    <span style="font-size:11px;color:var(--tt)">${esc(r.category||'')} · ${esc(r.time||r.date||'')}</span>
-                  </div>
-                  <div style="font-family:'Instrument Serif',Georgia,serif;font-size:17px;line-height:1.25;color:var(--text)">${esc(r.title)}</div>
-                  <div style="font-size:12px;color:var(--ts);margin-top:2px">${esc(r.subtitle)}</div>
-                </div>
-                ${r.image?`<img src="${esc(r.image)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;flex-shrink:0" loading="lazy" onerror="this.style.display='none'">`:''}
-              </div>`;
-            }
+                <div style="font-family:'Instrument Serif',Georgia,serif;font-size:17px;line-height:1.25;color:var(--text)">${esc(r.title)}</div>
+                <div style="font-size:12px;color:var(--ts);margin-top:3px;line-height:1.3">${esc(r.description)}</div>
+              </div>
+              ${r.image?`<img src="${esc(r.image)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;flex-shrink:0" loading="lazy" onerror="this.style.display='none'">`:''}
+            </div>`;
           });
         }
+      }
       }
     } else {
       const filtered=state.activeCat==='For You'?rankForYou(state.articles):state.articles.filter(a=>a.category===state.activeCat);
@@ -1652,14 +1707,6 @@ function renderDigest(){
     body=`<div class="digest-body"><div style="height:1px;background:var(--border);margin-bottom:16px"></div>${body}</div>`;
   }
   return`<div class="digest"><button class="digest-header" data-action="digest"><div><div class="digest-label">${icon} ${cycle} briefing</div><div class="digest-title">${greet}, Harry</div><div class="digest-sub">${state.articles.length} stories · ${state.sources.filter(s=>s.on).length} sources</div></div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="transform:${state.digestOpen?'rotate(180deg)':'none'};transition:.2s;flex-shrink:0"><path d="M6 9l6 6 6-6"/></svg></button>${body}</div>`;
-}
-
-function renderReviewCard(r){
-  const sc=r.score>=8.5?'var(--success)':'var(--warn)';
-  return`<div class="review-card" data-review="${r.id}">
-    <img class="review-img" src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none'">
-    <div class="review-header"><div class="review-score-pill" style="background:${sc}12;border:1px solid ${sc}25;color:${sc}">${r.score}</div><div><div class="review-meta">${esc(r.time)} · ${r.scores.length} reviews</div><div class="review-title">${esc(r.title)}</div></div></div>
-    <div class="review-subtitle">${esc(r.subtitle)}</div></div>`;
 }
 
 function renderSaved(){
@@ -1828,39 +1875,6 @@ function renderReadingView(){
     </div></div>`;
 }
 
-function renderReviewView(){
-  const r=state.selectedReview;if(!r)return'';
-  const sc=r.score>=8.5?'var(--success)':'var(--warn)';
-  return`<div class="review-view">
-    <div style="position:absolute;top:0;left:0;width:0;height:2px;background:var(--accent);z-index:20" id="review-progress"></div>
-    <div class="reading-toolbar">
-      <button class="tb-icon" data-action="close-review"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
-      <span style="font-size:12px;color:var(--tt);font-weight:500">Review Roundup</span>
-      <div style="width:32px"></div>
-    </div>
-    <div class="review-scroll" id="review-scroll">
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--tt);margin-bottom:8px">${esc(r.time)} · ${r.scores.length} critic reviews</div>
-      <h1 class="reading-title" style="margin-bottom:8px">${esc(r.title)}</h1>
-      <p style="font-size:15px;color:var(--ts);margin-bottom:20px;line-height:1.4">${esc(r.subtitle)}</p>
-      <img class="reading-hero" src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none'">
-      <div class="agg-box" style="background:${sc}08;border:1px solid ${sc}20">
-        <div class="agg-score" style="background:${sc}15;color:${sc}">${r.score}</div>
-        <div><div style="font-size:15px;font-weight:600;color:var(--text)">Aggregate Score</div><div style="font-size:12px;color:var(--tt);margin-top:2px">${(r.scores.reduce((a,s)=>a+s.s,0)/r.scores.length).toFixed(1)} avg from ${r.scores.length} reviews</div></div>
-      </div>
-      <p style="font-family:'Source Serif 4',Georgia,serif;font-size:17px;line-height:1.75;color:var(--text);margin:0 0 24px">${esc(r.summary)}</p>
-      ${r.verdict?`<div class="verdict-box"><div class="verdict-label">Bottom Line</div><div style="font-size:14px;line-height:1.6;color:var(--text)">${esc(r.verdict)}</div></div>`:''}
-      ${r.pros&&r.cons?`<div class="pros-cons"><div class="pros-col"><h4>Pros</h4><ul>${r.pros.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div><div class="cons-col"><h4>Cons</h4><ul>${r.cons.map(c=>`<li>${esc(c)}</li>`).join('')}</ul></div></div>`:''}
-      <div class="section-label" style="margin-top:28px">What Critics Say</div>
-      ${r.scores.map(s=>`<div class="critic-card">
-        <div class="critic-top"><span class="critic-pub">${esc(s.pub)}</span><div class="critic-score" style="background:${sc}15;border:1px solid ${sc}25;color:${sc}">${s.s}</div></div>
-        <p class="critic-verdict">${esc(s.v)}</p>
-        ${s.url?`<button class="critic-link-btn" data-critic-url="${esc(s.url)}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>Read full review</button>`:''}
-      </div>`).join('')}
-      <div class="section-label" style="margin-top:28px">Key Specs</div>
-      ${r.specs.map(s=>`<div class="spec-row"><div class="spec-top"><span class="spec-label">${esc(s.l)}</span><span class="spec-value">${esc(s.v)}</span></div><div class="spec-detail">${esc(s.d)}</div></div>`).join('')}
-    </div></div>`;
-}
-
 function renderSearch(){
   return`<div class="search-overlay"><div class="search-bar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--tt)" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><input id="search-input" type="text" placeholder="Search articles, reviews, topics..." autofocus><button class="search-cancel" data-action="close-search">Cancel</button></div><div class="search-results" id="search-results"></div></div>`;
 }
@@ -1875,7 +1889,15 @@ function bindEvents(){
     const a=[...state.articles,...state.bookmarks].find(x=>x.id===el.dataset.article);
     if(a)openArticle(a);
   })});
-  document.querySelectorAll('[data-review]').forEach(el=>{el.addEventListener('click',()=>{state.selectedReview=REVIEWS.find(r=>r.id===el.dataset.review);render()})});
+  document.querySelectorAll('[data-reviewlink]').forEach(el=>{el.addEventListener('click',()=>{
+    const url=el.dataset.reviewlink; if(!url)return;
+    const rev=(state.reviewArticles||[]).find(r=>r.link===url);
+    if(rev){
+      // Open review as article in reader view
+      state.selectedArticle={id:rev.id,title:rev.title,link:rev.link,source:rev.source,image:rev.image,time:rev.time,pw:false,category:'Reviews'};
+      openArticle(rev.link,rev.title,rev.source);
+    } else { window.open(url,'_blank'); }
+  })});
   document.querySelectorAll('[data-reviewcat]').forEach(el=>{el.addEventListener('click',()=>{activeReviewCat=el.dataset.reviewcat;render()})});
 
   // Critic review links — open in-app reader view
@@ -1897,17 +1919,17 @@ function bindEvents(){
       else if(act==='search'){state.showSearch=true;render();setTimeout(()=>$('#search-input')?.focus(),50)}
       else if(act==='close-search'){state.showSearch=false;render()}
       else if(act==='close-reading'){state.selectedArticle=null;state.richContent=null;state.richImages=[];state.fetchSource=null;render()}
-      else if(act==='close-review'){state.selectedReview=null;render()}
+
       else if(act==='digest'){
         state.digestOpen=!state.digestOpen;
-        if(state.digestOpen&&!state.digestText){state.digestLoading=true;render();const ai=await fetchDigest(state.articles);state.digestText=ai||genLocalDigest(state.articles);state.digestLoading=false}
+        if(state.digestOpen&&!state.digestText){state.digestText=genLocalDigest(state.articles)}
         render();
       }
       else if(act==='bookmark'&&state.selectedArticle)toggleBookmark(state.selectedArticle);
       else if(act==='tldr'&&state.selectedArticle){
         if(state.showTldr){state.showTldr=false;render();return}
         state.showTldr=true;trackEngagement(state.selectedArticle,'tldr');
-        if(!state.tldr){state.tldrLoading=true;render();const r=await fetchTldr(state.selectedArticle.title,state.selectedArticle.source);state.tldr=r||state.selectedArticle.excerpt;state.tldrLoading=false}
+        if(!state.tldr){state.tldr=getTldr(state.selectedArticle)}
         render();
       }
       else if(act==='archive'&&state.selectedArticle){
@@ -1982,12 +2004,16 @@ function bindEvents(){
   if(si){si.addEventListener('input',()=>{
     const q=si.value.toLowerCase();const res=$('#search-results');
     if(q.length<2){res.innerHTML='';return}
-    const all=[...state.articles,...REVIEWS.map(r=>({id:r.id,title:r.title,source:'Review',category:'Reviews',isReview:true}))];
+    const revItems=(state.reviewArticles||[]).map(r=>({id:r.id,title:r.title,source:r.source,category:r.reviewCat,link:r.link,image:r.image,time:r.time,isReview:true}));
+    const all=[...state.articles,...revItems];
     const m=all.filter(a=>a.title.toLowerCase().includes(q)||a.source?.toLowerCase().includes(q)||a.category?.toLowerCase().includes(q));
     if(!m.length){res.innerHTML=`<div class="search-empty">No results for "${esc(q)}"</div>`;return}
-    res.innerHTML=m.map(a=>`<div class="related-item" data-${a.isReview?'review':'article'}="${a.id}"><div class="related-source">${esc(a.source)} · ${esc(a.category)}</div><div class="related-title">${esc(a.title)}</div></div>`).join('');
+    res.innerHTML=m.map(a=>`<div class="related-item" data-${a.isReview?'reviewlink="'+esc(a.link)+'"':'article="'+a.id+'"'}><div class="related-source">${esc(a.source)} · ${esc(a.category||'')}</div><div class="related-title">${esc(a.title)}</div></div>`).join('');
     res.querySelectorAll('[data-article]').forEach(el=>{el.addEventListener('click',()=>{const a=state.articles.find(x=>x.id===el.dataset.article);if(a){state.showSearch=false;openArticle(a)}})});
-    res.querySelectorAll('[data-review]').forEach(el=>{el.addEventListener('click',()=>{state.selectedReview=REVIEWS.find(r=>r.id===el.dataset.review);state.showSearch=false;render()})});
+    res.querySelectorAll('[data-reviewlink]').forEach(el=>{el.addEventListener('click',()=>{
+      const url=el.dataset.reviewlink;const rev=(state.reviewArticles||[]).find(r=>r.link===url);
+      if(rev){state.showSearch=false;state.selectedArticle={id:rev.id,title:rev.title,link:rev.link,source:rev.source,image:rev.image,time:rev.time,pw:false,category:'Reviews'};openArticle(rev.link,rev.title,rev.source)}
+    })});
   })}
 
   // Scroll progress
@@ -2062,7 +2088,7 @@ function bindInAppLinks(){
 // ============================================================
 function openArticle(article){
   state.selectedArticle=article;
-  state.selectedReview=null;
+  
   state.tldr=null;state.showTldr=false;
   state.archive=null;state.archiveLoading=false;state.archiveStep=0;
   state.richContent=null;state.richImages=[];state.fetchSource=null;
@@ -2171,7 +2197,7 @@ async function openArticleFromUrl(url){
     link:url,image:null,readTime:'...',topics:[],pw:src?.pw||false,
   };
   state.selectedArticle=temp;
-  state.selectedReview=null; // IMPORTANT: close review view
+   // IMPORTANT: close review view
   state.tldr=null;state.showTldr=false;
   state.archive=null;state.archiveLoading=false;
   state.richContent=null;state.richImages=[];state.richLoading=true;state.fetchSource=null;
@@ -2233,10 +2259,8 @@ async function init(){
   fetchWeather(); // Start weather fetch (non-blocking)
   try{state.articles=await fetchRSS()}catch(e){console.warn('RSS:',e)}
   state.loading=false;render();
-  // Fetch reviews AFTER feed loads (non-blocking, lower priority)
-  if (REVIEWS.length === 0 || Date.now() - REVIEWS_TS > REVIEWS_TTL) {
-    setTimeout(() => fetchDynamicReviews(), 500);
-  }
+  // Fetch review feeds AFTER main feed loads (uses own proxy, won't hit rss2json)
+  setTimeout(() => fetchReviewFeeds(), 2000);
 }
 init();
 </script>
