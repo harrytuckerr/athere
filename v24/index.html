@@ -1,0 +1,2244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#FAFAF8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111110" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<title>@here</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif&family=Source+Serif+4:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;height:-webkit-fill-available;overflow:hidden;margin:0;padding:0;background:#FAFAF8}
+body{font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;min-height:100dvh;min-height:-webkit-fill-available}
+body.dark-bg{background:#111110}
+::-webkit-scrollbar{display:none}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes loadSlide{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+
+.app-shell{
+  position:fixed;inset:0;
+  padding-top:env(safe-area-inset-top);
+  padding-left:env(safe-area-inset-left);
+  padding-right:env(safe-area-inset-right);
+  display:flex;flex-direction:column;
+  transition:background .3s,color .3s;
+}
+
+/* ===== THEME TOKENS ===== */
+.app-shell{--bg:#FAFAF8;--bg-alt:#F0EFEC;--bg-el:rgba(250,250,248,.92);--text:#1a1a1a;--ts:#555;--tt:#888;--tm:#aaa;--tf:#bbb;--accent:#C4493A;--border:rgba(0,0,0,.06);--success:#3A7D44;--warn:#B8860B;--nav-off:#bbb;--p-bg:#F0EFEC;--p-tx:#666;--pa-bg:#1a1a1a;--pa-tx:#FAFAF8;--sum-bg:#F5F4F1;--sum-bor:rgba(0,0,0,.06);--arch-bg:#EEF2FF;--arch-bor:#C7D2FE;--arch-tx:#4338CA;--trend-tx:#DC2626;--trend-bg:rgba(239,68,68,.06);--trend-bor:rgba(239,68,68,.15);--success-bg:rgba(58,125,68,.08);--success-bor:rgba(58,125,68,.2);--warn-bg:rgba(184,134,11,.06);--warn-bor:rgba(184,134,11,.15)}
+.app-shell.dark{--bg:#111110;--bg-alt:#1C1C1A;--bg-el:rgba(17,17,16,.92);--text:#E8E6E1;--ts:#aaa;--tt:#777;--tm:#555;--tf:#444;--accent:#D4695D;--border:rgba(255,255,255,.06);--success:#5DAA68;--warn:#D4A843;--nav-off:#555;--p-bg:#1C1C1A;--p-tx:#888;--pa-bg:#E8E6E1;--pa-tx:#111110;--sum-bg:#1A1A18;--sum-bor:rgba(255,255,255,.06);--arch-bg:rgba(99,102,241,.1);--arch-bor:rgba(99,102,241,.25);--arch-tx:#818CF8;--trend-tx:#F87171;--trend-bg:rgba(248,113,113,.08);--trend-bor:rgba(248,113,113,.2);--success-bg:rgba(93,170,104,.1);--success-bor:rgba(93,170,104,.25);--warn-bg:rgba(212,168,67,.08);--warn-bor:rgba(212,168,67,.2)}
+
+.app-shell{background:var(--bg);color:var(--text)}
+
+/* ===== HEADER ===== */
+.header{padding:12px 20px 0;flex-shrink:0}
+.header-row{display:flex;justify-content:space-between;align-items:center}
+.header h1{font-family:'Instrument Serif',Georgia,serif;font-size:32px;font-weight:400;color:var(--text)}
+.header-meta{font-size:13px;color:var(--tt);margin-top:2px}
+.header-weather{font-size:13px;font-weight:600;color:var(--ts);white-space:nowrap;font-family:'DM Sans',sans-serif}
+.rain-chance{font-size:11px;color:#4A90D9;font-weight:700}
+.header-btns{display:flex;gap:6px}
+.icon-btn{width:34px;height:34px;border-radius:50%;background:var(--bg-alt);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text)}
+
+/* ===== CATEGORY TABS ===== */
+.cat-tabs{display:flex;gap:4px;padding:14px 20px 12px;overflow-x:auto;flex-shrink:0}
+.cat-tab{padding:7px 14px;border-radius:20px;border:none;cursor:pointer;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;white-space:nowrap;background:var(--p-bg);color:var(--p-tx);transition:.15s}
+.cat-tab.active{background:var(--pa-bg);color:var(--pa-tx)}
+
+/* ===== FEED ===== */
+.feed{flex:1;overflow-y:auto;padding:0 20px 120px;-webkit-overflow-scrolling:touch}
+.card{cursor:pointer;margin-bottom:20px}
+.card-featured img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:12px;margin-bottom:12px}
+.card-meta{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
+.card-source{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+.card-time{font-size:11px;color:var(--tf)}
+.card-title{font-family:'Instrument Serif',Georgia,serif;font-size:17px;line-height:1.3;color:var(--text);margin-bottom:4px}
+.card-featured .card-title{font-size:24px;line-height:1.2;margin-bottom:8px}
+.card-excerpt{font-size:14px;line-height:1.5;color:var(--ts)}
+.card-byline{font-size:12px;color:var(--tm);margin-top:6px}
+.card-row{display:flex;gap:14px}
+.card-row img{width:80px;height:80px;border-radius:10px;object-fit:cover;flex-shrink:0}
+.card-row .card-body{flex:1;min-width:0}
+.card-medium img{width:100%;aspect-ratio:2/1;object-fit:cover;border-radius:10px;margin-bottom:10px}
+.card-medium .card-title{font-family:'Instrument Serif',Georgia,serif;font-size:20px;line-height:1.25;margin-bottom:4px}
+
+/* Paywall badge */
+.pw-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;line-height:16px;font-family:'DM Sans',sans-serif;margin-left:6px;vertical-align:middle}
+.pw-badge.paywalled{background:var(--warn-bg);border:1px solid var(--warn-bor);color:var(--warn)}
+.divider{height:1px;background:var(--border);margin-bottom:18px}
+
+/* ===== DIGEST ===== */
+.digest{margin-bottom:20px;border-radius:16px;overflow:hidden;border:1px solid rgba(196,73,58,.12);background:var(--bg-alt)}
+.dark .digest{border-color:rgba(212,105,93,.15)}
+.digest-header{width:100%;background:none;border:none;padding:18px 20px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;text-align:left;color:var(--text)}
+.digest-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:4px}
+.digest-title{font-family:'Instrument Serif',Georgia,serif;font-size:20px;line-height:1.2}
+.digest-sub{font-size:12px;color:var(--tt);margin-top:4px}
+.digest-body{padding:0 20px 20px;animation:fadeUp .2s ease-out}
+.digest-text{font-family:'Source Serif 4',Georgia,serif;font-size:15px;line-height:1.65;color:var(--ts)}
+
+/* ===== READING VIEW ===== */
+.reading-view{position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;flex-direction:column;animation:slideUp .25s ease-out;padding-top:env(safe-area-inset-top)}
+.reading-progress{position:absolute;top:0;left:0;height:2px;background:var(--accent);transition:width .1s;z-index:20}
+.reading-toolbar{padding:14px 16px 10px;display:flex;justify-content:space-between;align-items:center;background:var(--bg-el);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);flex-shrink:0}
+.reading-scroll{flex:1;overflow-y:auto;padding:0 24px 100px;-webkit-overflow-scrolling:touch}
+.reading-source{font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-top:20px;margin-bottom:10px}
+.reading-title{font-family:'Instrument Serif',Georgia,serif;font-size:30px;line-height:1.15;color:var(--text);margin-bottom:16px}
+.reading-byline{display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+.byline-avatar{width:32px;height:32px;border-radius:50%;background:var(--bg-alt);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--tt)}
+.byline-name{font-size:14px;font-weight:600;color:var(--text)}
+.byline-date{font-size:12px;color:var(--tt)}
+
+/* Reading body — constrained images */
+.reading-hero{width:100%;border-radius:10px;max-height:300px;object-fit:cover;display:block;margin-bottom:24px}
+.embed-wrap{margin:20px 0;border-radius:8px;overflow:hidden}
+.embed-wrap iframe{display:block}
+
+/* Image gallery for consecutive photos */
+.img-gallery{margin:20px -24px;position:relative}
+.img-gallery-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:8px;padding:0 24px;scrollbar-width:none}
+.img-gallery-track::-webkit-scrollbar{display:none}
+.img-gallery-track figure{flex:0 0 88%;scroll-snap-align:center;margin:0;border-radius:10px;overflow:hidden}
+.img-gallery-track figure img{width:100%;max-height:420px;object-fit:cover;border-radius:10px;display:block}
+.img-gallery-track figure figcaption{padding:6px 4px;font-size:11px;color:var(--tt);text-align:center}
+.img-gallery-dots{display:flex;justify-content:center;gap:5px;padding:10px 0 4px}
+.gallery-dot{width:6px;height:6px;border-radius:50%;background:var(--tm);transition:all .2s}
+.gallery-dot.active{background:var(--accent);width:16px;border-radius:3px}
+
+/* iPad mini & tablet layout (744px viewport) */
+@media (min-width:700px) {
+  .app-shell{font-size:15px}
+  .feed{padding:0 16px;max-width:720px;margin:0 auto}
+  .cat-bar{padding:16px 16px 8px;max-width:720px;margin:0 auto}
+  .card-featured{border-radius:14px}
+  .card-featured img{max-height:380px}
+  .card-row{gap:16px;padding:14px 0}
+  .card-row img{width:140px;height:96px;border-radius:10px}
+  .card-row .card-meta{font-size:13px}
+  .reading-scroll{padding:0 48px 100px}
+  .reading-title{font-size:32px;line-height:1.2}
+  .reading-body p{font-size:18px;line-height:1.8}
+  .reading-body h2{font-size:26px}
+  .reading-body h3{font-size:22px}
+  .reading-body img{max-height:500px}
+  .reading-body figure img{max-height:500px}
+  .reading-hero{max-height:420px}
+  .review-scroll{padding:0 48px 100px}
+  .review-card .review-img{max-height:280px}
+  .agg-box{padding:20px}
+  .pros-cons{gap:20px}
+  .critic-card{padding:18px 20px}
+  .spec-row{padding:12px 16px}
+  .img-gallery{margin:24px -48px}
+  .img-gallery-track{padding:0 48px;gap:12px}
+  .img-gallery-track figure{flex:0 0 72%}
+  .bottom-nav{max-width:720px;left:50%;transform:translateX(-50%);border-radius:20px 20px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.08)}
+  .bottom-nav .nav-item{padding:10px 24px}
+  /* Search overlay */
+  .search-overlay .search-input{max-width:600px;margin:0 auto;display:block}
+  /* Settings */
+  .reading-scroll .source-row{padding:14px 0}
+}
+/* Larger tablets */
+@media (min-width:1024px) {
+  .feed{max-width:800px}
+  .cat-bar{max-width:800px}
+  .reading-scroll{padding:0 80px 120px}
+  .reading-body p{font-size:19px}
+  .reading-title{font-size:36px}
+  .img-gallery{margin:28px -80px}
+  .img-gallery-track{padding:0 80px}
+  .img-gallery-track figure{flex:0 0 60%}
+  .bottom-nav{max-width:800px}
+}
+.reading-body figcaption{font-size:12px;color:var(--tt);text-align:center;padding:8px 12px 0;line-height:1.4;font-family:'DM Sans',sans-serif;font-style:italic;border-top:1px solid var(--border);margin-top:8px}
+.reading-body .img-credit{font-size:13px;color:var(--tt);font-style:italic;font-family:'DM Sans',sans-serif}
+.reading-body blockquote{margin:24px 0;padding:16px 20px;border-left:3px solid var(--accent);background:var(--bg-alt);border-radius:0 10px 10px 0;font-style:italic;color:var(--ts)}
+.reading-body blockquote p{margin:0 0 8px;font-style:italic}
+.reading-body blockquote img{display:none}
+.reading-body p{font-family:'Source Serif 4',Georgia,serif;font-size:17px;line-height:1.75;color:var(--text);margin-bottom:20px}
+.reading-body img{width:100%;max-height:400px;object-fit:contain;border-radius:8px;display:block;margin:16px auto 20px}
+.reading-body a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.reading-body h2,.reading-body h3{font-family:'Instrument Serif',Georgia,serif;font-weight:400;margin:28px 0 12px;color:var(--text)}
+.reading-body h2{font-size:24px}
+.reading-body h3{font-size:20px}
+.reading-body figure{margin:20px 0;text-align:center}
+.reading-body figure img{width:100%;max-height:400px;object-fit:contain;border-radius:8px}
+.reading-body ul,.reading-body ol{margin:12px 0 20px 20px;font-family:'Source Serif 4',Georgia,serif;font-size:17px;line-height:1.75;color:var(--text)}
+.reading-body li{margin-bottom:6px}
+
+/* Article loading */
+.article-loading{text-align:center;padding:20px 0;margin-bottom:20px}
+.article-loading-bar{width:60%;height:3px;border-radius:2px;background:var(--bg-alt);margin:0 auto;overflow:hidden}
+.article-loading-bar::after{content:'';display:block;width:40%;height:100%;background:var(--accent);border-radius:2px;animation:loadSlide 1.2s ease-in-out infinite}
+.article-loading-text{font-size:12px;color:var(--tt);margin-top:8px}
+
+/* Fetch status badge */
+.fetch-status{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;margin-bottom:20px;animation:fadeUp .2s ease-out;font-size:12px;font-weight:500;font-family:'DM Sans',sans-serif}
+.fetch-status.success{background:var(--success-bg);border:1px solid var(--success-bor);color:var(--success)}
+.fetch-status.rss{background:var(--arch-bg);border:1px solid var(--arch-bor);color:var(--arch-tx)}
+.fetch-status.fail{background:var(--warn-bg);border:1px solid var(--warn-bor);color:var(--warn)}
+.fetch-status svg{flex-shrink:0}
+
+/* Toolbar */
+.tb-btn{background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;cursor:pointer;color:var(--tt);font-size:11px;font-weight:600;font-family:'DM Sans',sans-serif;display:inline-flex;align-items:center;gap:4px}
+.tb-btn.active{background:rgba(196,73,58,.1);border-color:rgba(196,73,58,.3);color:var(--accent)}
+.tb-icon{background:none;border:none;cursor:pointer;padding:6px;color:var(--tt)}
+.tb-icon.bookmarked{color:var(--accent)}
+
+/* ===== PAYWALL FALLBACK CHAIN — prominent green box ===== */
+.paywall-chain{padding:16px 18px;border-radius:14px;margin-bottom:20px;animation:fadeUp .2s ease-out}
+.paywall-chain.found{background:var(--success-bg);border:2px solid var(--success-bor)}
+.paywall-chain.searching{background:var(--arch-bg);border:2px solid var(--arch-bor)}
+.paywall-chain.unavail{background:var(--warn-bg);border:2px solid var(--warn-bor)}
+.paywall-chain .pw-title{font-size:14px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.paywall-chain.found .pw-title{color:var(--success)}
+.paywall-chain.searching .pw-title{color:var(--arch-tx)}
+.paywall-chain.unavail .pw-title{color:var(--warn)}
+.paywall-chain .pw-desc{font-size:12px;line-height:1.5;color:var(--ts);margin-bottom:10px}
+.pw-steps{display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.pw-step{font-size:11px;font-weight:500;padding:4px 10px;border-radius:6px;display:flex;align-items:center;gap:4px}
+.pw-step.done{background:var(--success-bg);color:var(--success);border:1px solid var(--success-bor)}
+.pw-step.active{background:var(--arch-bg);color:var(--arch-tx);border:1px solid var(--arch-bor)}
+.pw-step.pending{background:var(--bg-alt);color:var(--tf);border:1px solid var(--border)}
+.pw-step.fail{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-bor)}
+.pw-arrow{color:var(--tf);font-size:10px}
+.pw-actions{display:flex;gap:8px;flex-wrap:wrap}
+.pw-action{border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;border:none;display:inline-flex;align-items:center;gap:5px}
+.pw-action.primary{background:var(--success);color:#fff}
+.pw-action.secondary{background:none;border:1px solid var(--success-bor);color:var(--success)}
+.paywall-chain.unavail .pw-action.primary{background:var(--warn);color:#fff}
+.paywall-chain.unavail .pw-action.secondary{border-color:var(--warn-bor);color:var(--warn)}
+
+/* ===== ARCHIVE BANNER (non-paywall) ===== */
+.archive-banner{padding:14px 16px;border-radius:12px;margin-bottom:20px;animation:fadeUp .2s ease-out}
+.archive-banner.found{background:var(--arch-bg);border:1px solid var(--arch-bor)}
+.archive-banner.missing{background:var(--warn-bg);border:1px solid var(--warn-bor)}
+.archive-banner h4{font-size:13px;font-weight:600;margin-bottom:4px}
+.archive-banner.found h4{color:var(--arch-tx)}
+.archive-banner.missing h4{color:var(--warn)}
+.archive-banner p{font-size:12px;color:var(--ts);margin-top:4px;line-height:1.4}
+
+/* TL;DR */
+.tldr-box{padding:16px 18px;border-radius:12px;margin-bottom:24px;background:var(--sum-bg);border:1px solid var(--sum-bor)}
+.tldr-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:8px}
+.tldr-text{font-size:14px;line-height:1.6;color:var(--text)}
+
+/* Related */
+.related-section{margin-top:24px;padding-top:24px;border-top:1px solid var(--border)}
+.section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tt);margin-bottom:14px}
+.related-item{padding:10px 0;cursor:pointer;border-bottom:1px solid var(--border)}
+.related-source{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--tt);margin-bottom:4px}
+.related-title{font-family:'Instrument Serif',Georgia,serif;font-size:15px;line-height:1.3;color:var(--text)}
+
+/* ===== REVIEW CARD ===== */
+.review-card{cursor:pointer;margin-bottom:24px}
+.review-card .review-img{width:100%;border-radius:12px;margin-bottom:12px;aspect-ratio:16/10;object-fit:cover;background:var(--bg-alt)}
+.review-card .review-img-placeholder{width:100%;aspect-ratio:16/10;border-radius:12px;margin-bottom:12px;background:var(--bg-alt);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.review-header{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.review-score-pill{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;font-family:'DM Sans',sans-serif}
+.review-meta{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--tt)}
+.review-title{font-family:'Instrument Serif',Georgia,serif;font-size:18px;line-height:1.2;color:var(--text)}
+.review-subtitle{font-size:13px;color:var(--ts);line-height:1.4;margin-top:6px}
+
+/* ===== REVIEW VIEW ===== */
+.review-view{position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;flex-direction:column;animation:slideUp .25s ease-out;padding-top:env(safe-area-inset-top)}
+.review-scroll{flex:1;overflow-y:auto;padding:0 24px 100px;-webkit-overflow-scrolling:touch}
+.agg-box{display:flex;align-items:center;gap:16px;padding:16px;border-radius:14px;margin-bottom:24px}
+.agg-score{width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;font-family:'DM Sans',sans-serif}
+.spec-row{padding:10px 14px;border-radius:10px;background:var(--bg-alt);margin-bottom:6px}
+.spec-top{display:flex;justify-content:space-between;align-items:baseline}
+.spec-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tt)}
+.spec-value{font-size:13px;font-weight:600;color:var(--text)}
+.spec-detail{font-size:12px;color:var(--tt);line-height:1.4;margin-top:4px}
+/* Critic card — no nesting click issues */
+.critic-card{padding:14px 16px;border-radius:12px;background:var(--bg-alt);margin-bottom:8px}
+.critic-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.critic-pub{font-size:14px;font-weight:600;color:var(--text)}
+.critic-score{padding:3px 10px;border-radius:6px;font-size:14px;font-weight:700}
+.critic-verdict{font-size:13px;line-height:1.5;color:var(--ts)}
+.critic-link-btn{display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:6px 12px;border-radius:6px;border:1px solid var(--accent);border-opacity:.3;background:none;cursor:pointer;font-size:11px;font-weight:600;font-family:'DM Sans',sans-serif;color:var(--accent);transition:.15s}
+.critic-link-btn:active{opacity:.6}
+.pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}
+.pros-cons h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.pros-col h4{color:var(--success)}
+.cons-col h4{color:var(--warn)}
+.pros-cons li{font-size:13px;line-height:1.5;color:var(--ts);margin-bottom:4px;list-style:none;padding-left:16px;position:relative}
+.pros-col li::before{content:'✓';position:absolute;left:0;color:var(--success);font-weight:700;font-size:11px}
+.cons-col li::before{content:'✗';position:absolute;left:0;color:var(--warn);font-weight:700;font-size:11px}
+.verdict-box{padding:16px 18px;border-radius:12px;margin:20px 0;background:var(--sum-bg);border:1px solid var(--sum-bor)}
+.verdict-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:8px}
+
+/* ===== SAVED ===== */
+.empty-state{text-align:center;padding:80px 24px}
+.empty-state .emoji{font-size:40px;margin-bottom:12px}
+.empty-state h2{font-family:'Instrument Serif',Georgia,serif;font-size:20px;color:var(--text);margin-bottom:8px}
+.empty-state p{font-size:13px;color:var(--tt);line-height:1.5}
+.saved-item{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);align-items:flex-start}
+.saved-item img{width:56px;height:56px;border-radius:8px;object-fit:cover;flex-shrink:0;cursor:pointer}
+.saved-body{flex:1;cursor:pointer;min-width:0}
+.saved-remove{background:none;border:none;cursor:pointer;color:var(--tm);padding:4px;flex-shrink:0;font-size:16px}
+
+/* ===== SOURCES ===== */
+.source-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)}
+.source-name{font-size:15px;font-weight:500;display:flex;align-items:center;gap:8px;cursor:pointer}
+.source-name.off{color:var(--tm)}
+.toggle{width:40px;height:22px;border-radius:11px;position:relative;transition:.2s;flex-shrink:0;cursor:pointer}
+.toggle.on{background:var(--accent)}
+.toggle.off{background:var(--bg-alt)}
+.toggle-knob{position:absolute;top:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.toggle.on .toggle-knob{left:20px}
+.toggle.off .toggle-knob{left:2px}
+
+/* Add source */
+.add-source-btn{width:100%;padding:14px;border-radius:12px;border:2px dashed var(--border);background:none;cursor:pointer;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;color:var(--accent);display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:20px;transition:.15s}
+.add-source-btn:active{background:var(--bg-alt)}
+.add-source-form{padding:16px;border-radius:14px;background:var(--bg-alt);margin-bottom:20px;animation:fadeUp .2s ease-out}
+.add-source-form label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tt);margin-bottom:6px;display:block}
+.add-source-form input,.add-source-form select{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;margin-bottom:12px;outline:none}
+.add-source-form input:focus,.add-source-form select:focus{border-color:var(--accent)}
+.add-source-form select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.form-row{display:flex;gap:8px}
+.form-row .btn{flex:1;padding:10px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif}
+.form-row .btn-primary{background:var(--accent);color:#fff}
+.form-row .btn-secondary{background:var(--bg);border:1px solid var(--border);color:var(--tt)}
+.source-custom-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:var(--arch-bg);border:1px solid var(--arch-bor);color:var(--arch-tx);margin-left:4px}
+.source-delete{background:none;border:none;cursor:pointer;color:var(--tm);padding:4px 8px;font-size:14px}
+
+/* Fallback chain explainer */
+.fc-explainer{display:flex;align-items:center;gap:0;padding:10px 12px;border-radius:8px;background:var(--bg-alt);margin-bottom:20px;flex-wrap:wrap}
+.fc-explainer .fc-step{font-size:11px;font-weight:500;font-family:'DM Sans',sans-serif;padding:2px 6px;border-radius:4px}
+.fc-explainer .fc-step.first{color:var(--success);background:var(--success-bg);border:1px solid var(--success-bor)}
+.fc-explainer .fc-step.rest{color:var(--ts);background:transparent;border:1px solid transparent}
+.fc-explainer .fc-arrow{margin:0 2px;color:var(--tf)}
+
+/* ===== SETTINGS ===== */
+.setting-row{padding:12px 0;border-bottom:1px solid var(--border)}
+.setting-label{font-size:15px;color:var(--text)}
+.setting-desc{font-size:12px;color:var(--tt);margin-top:2px}
+
+/* ===== SEARCH ===== */
+.search-overlay{position:fixed;inset:0;background:var(--bg);z-index:60;animation:fadeUp .15s ease-out;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
+.search-bar{padding:16px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.search-bar input{flex:1;background:none;border:none;outline:none;font-size:16px;font-family:'DM Sans',sans-serif;color:var(--text)}
+.search-bar input::placeholder{color:var(--tm)}
+.search-cancel{background:none;border:none;cursor:pointer;color:var(--accent);font-size:14px;font-weight:500}
+.search-results{flex:1;overflow-y:auto;padding:8px 20px}
+.search-empty{color:var(--tt);text-align:center;padding:40px 0}
+
+/* ===== BOTTOM NAV ===== */
+.bottom-nav{flex-shrink:0;height:80px;background:var(--bg-el);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;justify-content:space-around;align-items:flex-start;padding-top:10px;padding-bottom:env(safe-area-inset-bottom)}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;min-width:60px;position:relative;transition:.15s}
+.nav-item svg{color:var(--nav-off)}
+.nav-item span{font-size:10px;font-weight:500;color:var(--nav-off)}
+.nav-item.active svg,.nav-item.active span{color:var(--accent)}
+.nav-badge{position:absolute;top:-2px;right:12px;width:16px;height:16px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff}
+
+.loading-dots{display:flex;gap:6px;justify-content:center;padding:8px 0}
+.loading-dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+
+/* Live blog */
+.live-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.15);margin-bottom:20px}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#DC2626;animation:pulse 2s infinite}
+.live-label{font-size:12px;font-weight:700;color:#DC2626;font-family:'DM Sans',sans-serif;letter-spacing:.04em}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+// ============================================================
+// SERVICE WORKER
+// ============================================================
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// ============================================================
+// CORS PROXY — self-hosted endpoint first (Cloudflare Worker), then fallbacks
+// ============================================================
+const SELF_PROXY = '/proxy?url='; // Our own Cloudflare Worker proxy endpoint
+
+const CORS_PROXIES = [
+  url => `${SELF_PROXY}${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+];
+
+async function fetchViaProxy(url, timeoutMs = 5000) {
+  for (const mkUrl of CORS_PROXIES) {
+    try {
+      const proxyUrl = mkUrl(url);
+      const controller = new AbortController();
+      // Self-proxy gets 2s (fast fail if not deployed), externals get full timeout
+      const isSelf = proxyUrl.startsWith('/');
+      const timer = setTimeout(() => controller.abort(), isSelf ? 2000 : timeoutMs);
+      const res = await fetch(proxyUrl, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const text = await res.text();
+      // Validate we got real HTML, not an error page from the proxy
+      if (text.length > 500 && (text.includes('<') || text.includes('{'))) return text;
+    } catch {}
+  }
+  return null;
+}
+
+// ============================================================
+// STATE
+// ============================================================
+const state = {
+  articles: [],
+  loading: true,
+  activeTab: 'feed',
+  activeCat: 'For You',
+  darkMode: localStorage.getItem('reader-dark') === 'true',
+  bookmarks: JSON.parse(localStorage.getItem('reader-bookmarks') || '[]'),
+  sources: JSON.parse(localStorage.getItem('reader-sources') || 'null') || defaultSources(),
+  selectedArticle: null,
+  selectedReview: null,
+  showSearch: false,
+  digestOpen: false,
+  digestText: null,
+  digestLoading: false,
+  // Reading
+  tldr: null, tldrLoading: false, showTldr: false,
+  archive: null, archiveLoading: false, archiveStep: 0,
+  weather: null, weatherTs: 0,
+  reviewsLoading: false,
+  reviewsFailed: false,
+  richContent: null, richLoading: false, richImages: [],
+  fetchSource: null, // 'full' | 'rss' | 'fail'
+  // Sources UI
+  showAddSource: false,
+  // Engagement
+  engagement: JSON.parse(localStorage.getItem('reader-engagement') || '{}'),
+};
+
+// Weather (Open-Meteo, free, no key needed)
+async function fetchWeather() {
+  const TTL = 3 * 60 * 60 * 1000; // 3 hours
+  if (state.weather && Date.now() - state.weatherTs < TTL) return;
+  try {
+    // Try geolocation, fall back to Melbourne
+    let lat = -37.8136, lon = 144.9631, locName = 'Melbourne';
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000, maximumAge: TTL });
+      });
+      lat = pos.coords.latitude;
+      lon = pos.coords.longitude;
+      locName = '';
+    } catch {}
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&hourly=precipitation_probability&timezone=auto&forecast_hours=3`);
+    const d = await res.json();
+    const hourlyRain = d.hourly?.precipitation_probability || [];
+    const maxRain = Math.max(...hourlyRain.slice(0, 3));
+    const wmo = d.current.weather_code;
+    const icons = {0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌦',55:'🌧',61:'🌧',63:'🌧',65:'🌧',71:'❄️',73:'❄️',75:'❄️',80:'🌦',81:'🌧',82:'⛈',95:'⛈',96:'⛈',99:'⛈'};
+    state.weather = { temp: Math.round(d.current.temperature_2m), icon: icons[wmo] || '🌡', rain: maxRain > 10 ? maxRain : 0 };
+    state.weatherTs = Date.now();
+    render();
+  } catch(e) { console.warn('Weather:', e); }
+}
+
+function defaultSources() {
+  return [
+    // Tech
+    {id:'s1',name:'The Verge',cat:'Tech',feed:'https://www.theverge.com/rss/index.xml',on:true,pw:false,domain:'theverge.com',custom:false},
+    {id:'s2',name:'Ars Technica',cat:'Tech',feed:'https://feeds.arstechnica.com/arstechnica/index',on:true,pw:false,domain:'arstechnica.com',custom:false},
+    {id:'s3',name:'9to5Mac',cat:'Tech',feed:'https://9to5mac.com/feed/',on:true,pw:false,domain:'9to5mac.com',custom:false},
+    {id:'s3b',name:'9to5Google',cat:'Tech',feed:'https://9to5google.com/feed/',on:true,pw:false,domain:'9to5google.com',custom:false},
+    {id:'s3c',name:'TechCrunch',cat:'Tech',feed:'https://techcrunch.com/feed/',on:true,pw:false,domain:'techcrunch.com',custom:false},
+    {id:'s3d',name:'Engadget',cat:'Tech',feed:'https://www.engadget.com/rss.xml',on:true,pw:false,domain:'engadget.com',custom:false},
+    {id:'s3e',name:'Wired',cat:'Tech',feed:'https://www.wired.com/feed/rss',on:true,pw:true,domain:'wired.com',custom:false},
+    {id:'s3f',name:'Bloomberg Tech',cat:'Tech',feed:'https://rsshub.app/bloomberg/technology',on:true,pw:true,domain:'bloomberg.com',custom:false},
+    {id:'s3g',name:'404 Media',cat:'Tech',feed:'https://www.404media.co/rss/',on:true,pw:true,domain:'404media.co',custom:false},
+    {id:'s3h',name:'CNET',cat:'Tech',feed:'https://www.cnet.com/rss/news/',on:true,pw:false,domain:'cnet.com',custom:false},
+    {id:'s3i',name:'The Register',cat:'Tech',feed:'https://www.theregister.com/headlines.atom',on:false,pw:false,domain:'theregister.com',custom:false},
+    {id:'s3j',name:'Hacker News',cat:'Tech',feed:'https://hnrss.org/frontpage',on:false,pw:false,domain:'news.ycombinator.com',custom:false},
+    // Australia
+    {id:'s4',name:'ABC News AU',cat:'Australia',feed:'https://www.abc.net.au/news/feed/2942460/rss.xml',on:true,pw:false,domain:'abc.net.au',custom:false},
+    {id:'s5',name:'The Guardian AU',cat:'Australia',feed:'https://www.theguardian.com/au/rss',on:true,pw:false,domain:'theguardian.com',custom:false},
+    {id:'s5b',name:'SBS News',cat:'Australia',feed:'https://www.sbs.com.au/news/feed',on:true,pw:false,domain:'sbs.com.au',custom:false},
+    {id:'s5c',name:'The Age',cat:'Australia',feed:'https://www.theage.com.au/rss/feed.xml',on:true,pw:true,domain:'theage.com.au',custom:false},
+    {id:'s5d',name:'Crikey',cat:'Australia',feed:'https://news.google.com/rss/search?q=site:crikey.com.au&hl=en-AU&gl=AU&ceid=AU:en',on:true,pw:true,domain:'crikey.com.au',custom:false},
+    {id:'s5e',name:'The Saturday Paper',cat:'Australia',feed:'https://news.google.com/rss/search?q=site:thesaturdaypaper.com.au&hl=en-AU&gl=AU&ceid=AU:en',on:false,pw:true,domain:'thesaturdaypaper.com.au',custom:false},
+    {id:'s5f',name:'The Conversation AU',cat:'Australia',feed:'https://theconversation.com/au/articles.atom',on:true,pw:false,domain:'theconversation.com',custom:false},
+    // Photo
+    {id:'s6',name:'PetaPixel',cat:'Photo',feed:'https://petapixel.com/feed/',on:true,pw:false,domain:'petapixel.com',custom:false},
+    {id:'s7',name:'DPReview',cat:'Photo',feed:'https://www.dpreview.com/feeds/news.xml',on:true,pw:false,domain:'dpreview.com',custom:false},
+    {id:'s7b',name:'Fstoppers',cat:'Photo',feed:'https://fstoppers.com/rss.xml',on:true,pw:false,domain:'fstoppers.com',custom:false},
+    {id:'s7c',name:'DIY Photography',cat:'Photo',feed:'https://www.diyphotography.net/feed/',on:false,pw:false,domain:'diyphotography.net',custom:false},
+    {id:'s7d',name:'Imaging Resource',cat:'Photo',feed:'https://www.imaging-resource.com/feed/',on:false,pw:false,domain:'imaging-resource.com',custom:false},
+    // Sport
+    {id:'s8',name:'ESPN',cat:'Sport',feed:'https://www.espn.com/espn/rss/news',on:true,pw:false,domain:'espn.com',custom:false},
+    {id:'s8b',name:'The Athletic',cat:'Sport',feed:'https://rsshub.app/nytimes/athletic',on:true,pw:true,domain:'theathletic.com',custom:false},
+    {id:'s8c',name:'Fox Sports AU',cat:'Sport',feed:'https://www.foxsports.com.au/content-feeds/FastXml/fox-sports/feed/news.xml',on:false,pw:false,domain:'foxsports.com.au',custom:false},
+    {id:'s8d',name:'BBC Sport',cat:'Sport',feed:'https://feeds.bbci.co.uk/sport/rss.xml',on:true,pw:false,domain:'bbc.com',custom:false},
+    {id:'s8e',name:'The Guardian Sport',cat:'Sport',feed:'https://www.theguardian.com/sport/rss',on:true,pw:false,domain:'theguardian.com',custom:false},
+    {id:'s8f',name:'AFL.com.au',cat:'Sport',feed:'https://www.afl.com.au/news/feed',on:true,pw:false,domain:'afl.com.au',custom:false},
+    {id:'s8g',name:'Cricket Australia',cat:'Sport',feed:'https://www.cricket.com.au/news/rss',on:false,pw:false,domain:'cricket.com.au',custom:false},
+    // World
+    {id:'s9',name:'Reuters World',cat:'World',feed:'https://www.reutersagency.com/feed/',on:true,pw:false,domain:'reuters.com',custom:false},
+    {id:'s10',name:'AP News',cat:'World',feed:'https://rsshub.app/apnews/topics/world-news',on:true,pw:false,domain:'apnews.com',custom:false},
+    {id:'s10b',name:'BBC News',cat:'World',feed:'https://feeds.bbci.co.uk/news/world/rss.xml',on:true,pw:false,domain:'bbc.com',custom:false},
+    {id:'s10c',name:'NYT World',cat:'World',feed:'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',on:false,pw:true,domain:'nytimes.com',custom:false},
+    {id:'s10d',name:'Al Jazeera',cat:'World',feed:'https://www.aljazeera.com/xml/rss/all.xml',on:false,pw:false,domain:'aljazeera.com',custom:false},
+    {id:'s10e',name:'The Economist',cat:'World',feed:'https://www.economist.com/international/rss.xml',on:false,pw:true,domain:'economist.com',custom:false},
+    // Auto
+    {id:'s11',name:'Top Gear',cat:'Auto',feed:'https://www.topgear.com/rss/feed',on:true,pw:false,domain:'topgear.com',custom:false},
+    {id:'s11b',name:'CarExpert',cat:'Auto',feed:'https://www.carexpert.com.au/feed',on:true,pw:false,domain:'carexpert.com.au',custom:false},
+    {id:'s11c',name:'Drive.com.au',cat:'Auto',feed:'https://www.drive.com.au/feed/',on:true,pw:false,domain:'drive.com.au',custom:false},
+    {id:'s11d',name:'Jalopnik',cat:'Auto',feed:'https://jalopnik.com/rss',on:false,pw:false,domain:'jalopnik.com',custom:false},
+  ];
+}
+
+const CATEGORIES = ['For You','Tech','Australia','Sport','Photo','World','Auto','Reviews'];
+const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
+const APP_VERSION = 'V20';
+
+// Post-render: hide decorative images (quote marks, ornaments) based on loaded dimensions
+function cleanupLoadedImages(container) {
+  if (!container) return;
+  const imgs = container.querySelectorAll('.reading-body img, .reading-body figure img');
+  const srcCount = {};
+  imgs.forEach(img => {
+    const s = img.src || '';
+    srcCount[s] = (srcCount[s] || 0) + 1;
+  });
+  imgs.forEach(img => {
+    const check = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      if (!w || !h) return;
+      const ratio = w / h;
+      const src = (img.src || '').toLowerCase();
+      let hide = false;
+      // Exact duplicate in same article = decorative pair (quote marks)
+      if (srcCount[img.src] > 1) hide = true;
+      // Nearly square small images = decorative icons/ornaments
+      if (ratio > 0.7 && ratio < 1.4 && w < 300) hide = true;
+      // Very wide banners/separators
+      if (ratio > 4 && h < 80) hide = true;
+      // Guardian static system images (quote marks, icons, logos)
+      if (/\/sys-images\/|static\/|inline-/i.test(src)) hide = true;
+      // SVG-looking images (very clean edges, often decorative)
+      if (src.endsWith('.svg') || src.includes('/svg/')) hide = true;
+      // Solid-color images (quote marks are usually solid black/white)
+      // We can't check pixels, but if it's very small file rendered large = decorative
+      if (w < 200 && (img.offsetWidth || 0) > 300) hide = true;
+      if (hide) {
+        const fig = img.closest('figure');
+        if (fig) fig.style.display = 'none';
+        else img.style.display = 'none';
+      }
+    };
+    if (img.complete) check();
+    else img.addEventListener('load', check);
+  });
+}
+
+// ============================================================
+// SHARED CONTENT PIPELINE — used by both RSS and full-article parsing
+// ============================================================
+
+// Unified junk selector list — one place to maintain
+const JUNK_SELECTORS = 'script,style,nav,footer,header,.ad,.ads,.advertisement,.sidebar,.comments,#comments,.social-share,.newsletter-signup,.related-posts,.share-buttons,[aria-hidden="true"],noscript,.promo,.popup,.modal,.cookie-banner,.consent,[data-ad],.ad-wrapper,.sponsored';
+const AUTHOR_SELECTORS = '[class*="author-bio"],[class*="author-card"],[class*="contributor-bio"],[id*="author-bio"],.about-the-author,.author-box,.writer-bio,[class*="author-info"],[class*="byline-bio"],[class*="author-detail"],[class*="author"],[class*="byline"],[class*="bio"],[class*="profile"],[class*="contributor"]';
+const RELATED_SELECTORS = '[class*="related"],[class*="Related"],[class*="more-stories"],[class*="read-more"],[class*="also-on"],[class*="more-from"],[class*="recirc"],[data-component="related"],.aside-related,.teaser,.promo-card,.inline-related,.story-related';
+const SOCIAL_SELECTORS = '[class*="social-btn"],[class*="share-btn"],[class*="follow-btn"],a[href*="mailto:"],[class*="article-social"],[class*="article-actions"]';
+const PROMO_SELECTORS = '[class*="native-ad"],[class*="sponsor"],[class*="promoted"],[class*="partner-content"],[class*="commerce"],[data-module*="promo"],[data-module*="newsletter"],[class*="newsletter-promo"],[class*="sign-up"],[class*="signup"]';
+
+function cleanDom(doc) {
+  doc.querySelectorAll(JUNK_SELECTORS).forEach(e => e.remove());
+  doc.querySelectorAll(AUTHOR_SELECTORS).forEach(e => e.remove());
+  doc.querySelectorAll(SOCIAL_SELECTORS).forEach(e => e.remove());
+  doc.querySelectorAll(PROMO_SELECTORS).forEach(e => e.remove());
+  // Related sections — only remove if short/promo-like
+  doc.querySelectorAll(RELATED_SELECTORS).forEach(e => {
+    if (e.querySelector('img') || e.querySelectorAll('a').length > 1 || e.textContent.trim().length < 300) e.remove();
+  });
+  // Short asides (almost always promo, not editorial)
+  doc.querySelectorAll('aside:not([class*="pull"]):not([class*="highlight"])').forEach(e => {
+    if (e.textContent.trim().length < 500) e.remove();
+  });
+  // Non-editorial iframes
+  doc.querySelectorAll('iframe').forEach(iframe => {
+    const src = iframe.getAttribute('src') || '';
+    if (!/youtube|youtu\.be|vimeo|datawrapper|flourish|infogr/i.test(src)) iframe.remove();
+  });
+  // Credential/action lists
+  doc.querySelectorAll('ul, ol').forEach(list => {
+    const items = list.querySelectorAll('li');
+    const text = list.textContent.trim();
+    if (items.length <= 6 && /^(Senior|Author of|Graduate|Correspondent|Editor|Reporter|Follow on|Email|Print|Close|Share)/i.test(text) && text.length < 300) list.remove();
+    const allActions = [...items].every(li => /^(Email|Print|Share|Close|Follow|Subscribe)$/i.test(li.textContent.trim()) || li.querySelector('a[href*="twitter"],a[href*="facebook"],a[href*="mailto"]'));
+    if (items.length > 0 && allActions) list.remove();
+  });
+  // Related headings + their siblings
+  doc.querySelectorAll('h2, h3, h4').forEach(el => {
+    const t = el.textContent.trim();
+    if (/^(Related Article|More Stories|Also Read|Recommended|You may also|Sign up|Newsletter)/i.test(t)) {
+      const next = el.nextElementSibling;
+      if (next) next.remove();
+      el.remove();
+    }
+  });
+}
+
+// Unified text skip check — one function, one place to add patterns
+function shouldSkipText(text) {
+  if (!text || text.length === 0) return true;
+  const t = text.trim();
+  // Metadata patterns
+  if (/^(By |Topic:|Author:|Published[ :]|Updated[ :]|Read more|Also read|Related:|Related Article|More Stories|You may also|Recommended|Most Popular|Sign up|Subscribe|Newsletter|Advertisement|Close|Print|Email|Follow on|Share this|Save up to|Offer ends|Comment on|Get the app)/i.test(t) && t.length < 200) return true;
+  // SBS/news metadata
+  if (/^(For the latest from|Download our app|Source:|Published \d|Updated \d|\d+ min(?:ute)? read$)/i.test(t) && t.length < 200) return true;
+  if (/download our app|subscribe to our newsletter|get the latest news/i.test(t) && t.length < 200) return true;
+  // Author credentials
+  if (/^(Senior .* writer|Author of|Graduate of|Staff writer|Correspondent|Editor|Reporter|Follow @)/i.test(t) && t.length < 100) return true;
+  return false;
+}
+
+function shouldSkipHeading(text) {
+  return /related|more stories|also read|recommended|trending|popular|sign up|newsletter|more in |you might/i.test(text);
+}
+
+// Unified node processor — builds clean HTML from a set of DOM nodes
+function processNodes(nodes, opts = {}) {
+  const seenKeys = new Set(opts.heroKey ? [opts.heroKey] : []);
+  const seenText = new Set();
+  let clean = '';
+  const images = [];
+
+  nodes.forEach(node => {
+    // Skip <img> inside <figure> — handled in figure branch
+    if (node.tagName === 'IMG' && node.closest('figure')) return;
+
+    if (node.tagName === 'IMG') {
+      const src = fixImgUrl(node.getAttribute('src') || node.getAttribute('data-src') || '');
+      if (!src || !src.startsWith('http') || isJunkImg(src)) return;
+      if (isAuthorImg(node) || isDecorativeImg(node)) return;
+      const key = imgKey(src);
+      if (key.length < 3 || seenKeys.has(key)) return;
+      seenKeys.add(key);
+      images.push(src);
+      clean += `<figure><img src="${esc(src)}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"></figure>`;
+
+    } else if (node.tagName === 'FIGURE') {
+      const img = node.querySelector('img');
+      const cap = node.querySelector('figcaption');
+      if (!img) return;
+      const src = fixImgUrl(img.getAttribute('src') || img.getAttribute('data-src') || '');
+      if (!src || isJunkImg(src)) return;
+      if (isAuthorImg(img) || isDecorativeImg(img)) return;
+      const key = imgKey(src);
+      if (key.length < 3 || seenKeys.has(key)) return;
+      seenKeys.add(key);
+      images.push(src);
+      clean += `<figure><img src="${esc(src)}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'">${cap ? `<figcaption>${cap.textContent}</figcaption>` : ''}</figure>`;
+
+    } else if (node.tagName === 'IFRAME') {
+      const src = node.getAttribute('src') || '';
+      if (src) clean += `<div class="embed-wrap"><iframe src="${esc(src)}" width="100%" height="400" frameborder="0" allowfullscreen loading="lazy" style="border-radius:8px;max-width:100%"></iframe></div>`;
+
+    } else if (node.tagName === 'BLOCKQUOTE') {
+      const cls = (node.className || '').toLowerCase();
+      if (cls.includes('twitter') || cls.includes('instagram')) {
+        clean += node.outerHTML;
+        return;
+      }
+      const inner = node.innerHTML.replace(/<script[\s\S]*?<\/script>/gi,'');
+      const bqText = stripHtml(inner).trim();
+      const bqKey = bqText.slice(0, 80).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (bqKey.length > 10 && seenText.has(bqKey)) return;
+      if (bqKey.length > 10) seenText.add(bqKey);
+      // Strip decorative images inside blockquotes
+      const cleanInner = inner.replace(/<img[^>]*>/gi, '').replace(/<figure[\s\S]*?<\/figure>/gi, '');
+      if (stripHtml(cleanInner).trim().length > 5) clean += `<blockquote>${cleanInner}</blockquote>`;
+
+    } else {
+      const tag = node.tagName.toLowerCase();
+      const inner = node.innerHTML
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/on\w+="[^"]*"/gi, '')
+        .replace(/<svg[\s\S]*?<\/svg>/gi, '');
+      const text = stripHtml(inner).trim();
+      if (text.length < 10) return;
+      if (shouldSkipText(text)) return;
+      if ((tag === 'h2' || tag === 'h3' || tag === 'h4') && shouldSkipHeading(text)) return;
+      // Dedup paragraphs
+      const pKey = text.slice(0, 100).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (tag === 'p' && pKey.length > 20 && seenText.has(pKey)) return;
+      if (pKey.length > 20) seenText.add(pKey);
+      clean += `<${tag}>${inner}</${tag}>`;
+    }
+  });
+  return { html: clean, images };
+}
+
+// Unified Anthropic API caller — routes through our Cloudflare Worker proxy
+// The Anthropic API does NOT support browser CORS, so we MUST proxy through our worker.
+// If the worker isn't deployed, this will fail gracefully (no infinite loops).
+async function callClaude(prompt, { maxTokens = 600, webSearch = false } = {}) {
+  try {
+    const body = { model:'claude-sonnet-4-20250514', max_tokens: maxTokens,
+      messages:[{role:'user', content: prompt}] };
+    if (webSearch) body.tools = [{type:'web_search_20250305', name:'web_search'}];
+    
+    // Route through our Cloudflare Worker API proxy endpoint
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000); // 30s for AI calls
+    const r = await fetch('/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!r.ok) return null;
+    const d = await r.json();
+    return (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim() || null;
+  } catch(e) { console.warn('callClaude failed (deploy worker.js to enable):', e.message); return null; }
+}
+
+function postProcessHtml(html) {
+  if (!html) return html;
+  
+  // 1. Truncate at newsletter/promo markers
+  const promoPatterns = [
+    /(<(?:h[2-4]|p|div)[^>]*>)\s*(?:The Verge Daily|Subscribe to|Newsletter|Sign up for|Read on The Verge|This is the title for the native ad)/i,
+    /(<(?:h[2-4]|p|div)[^>]*>)\s*(?:A free daily digest|Get the newsletter|Don't miss a thing|Sign up for our)/i,
+    /(<(?:h[2-4]|p|div)[^>]*>)\s*(?:Most Popular|Trending Now|Top Stories|You May Also Like|Recommended For You|More In )/i,
+    /(<(?:h[2-4]|p|div|em|i)[^>]*>)\s*(?:Start the day with a summary|Get the Morning Edition|Morning Edition newsletter)/i,
+    /(<(?:h[2-4]|p|div)[^>]*>)\s*(?:Save up to \$|% off|% to |Use code |Offer ends|Promo code|Limited time)/i,
+    /(<(?:p|div|em|i)[^>]*>)\s*(?:For the latest from|Download our app|Get the latest)/i,
+  ];
+  for (const pat of promoPatterns) {
+    const match = html.match(pat);
+    if (match) {
+      html = html.slice(0, match.index);
+      break;
+    }
+  }
+  
+  // 1b. Also strip promo blocks that appear mid-article (TechCrunch ads, etc.)
+  // Detect repeated blocks: if the same 100+ char text appears twice, remove both instances
+  const textBlocks = [];
+  html.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, (match, inner, offset) => {
+    const t = inner.replace(/<[^>]+>/g, '').trim();
+    if (t.length > 80) textBlocks.push({ text: t, offset, len: match.length });
+    return match;
+  });
+  // Find dupes
+  const dupeTexts = new Set();
+  const textSeen = {};
+  textBlocks.forEach(b => {
+    const key = b.text.slice(0, 100).toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (textSeen[key]) dupeTexts.add(key);
+    textSeen[key] = true;
+  });
+  // Remove dupe blocks (work backwards to preserve offsets)
+  if (dupeTexts.size > 0) {
+    const toRemove = [];
+    html.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, (match, inner, offset) => {
+      const t = inner.replace(/<[^>]+>/g, '').trim();
+      const key = t.slice(0, 100).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (dupeTexts.has(key)) toRemove.push({ offset, len: match.length });
+      return match;
+    });
+    // Remove all but first occurrence of each dupe
+    const seenDupe = new Set();
+    const removals = toRemove.filter(r => {
+      const snippet = html.slice(r.offset, r.offset + r.len);
+      const t = snippet.replace(/<[^>]+>/g, '').trim();
+      const key = t.slice(0, 100).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (seenDupe.has(key)) return true;
+      seenDupe.add(key);
+      return false;
+    });
+    // Remove from end to start
+    removals.sort((a, b) => b.offset - a.offset);
+    for (const r of removals) {
+      html = html.slice(0, r.offset) + html.slice(r.offset + r.len);
+    }
+  }
+  for (const pat of promoPatterns) {
+    const match = html.match(pat);
+    if (match) {
+      html = html.slice(0, match.index);
+      break;
+    }
+  }
+  
+  // 2. Strip link lists (numbered article lists, "top stories" etc)
+  html = html.replace(/<ol[^>]*>[\s\S]*?<\/ol>/gi, (match) => {
+    const links = (match.match(/<a /gi) || []).length;
+    const items = (match.match(/<li/gi) || []).length;
+    if (items >= 3 && links >= 2) return ''; // List of 3+ items with links = article list
+    return match;
+  });
+  html = html.replace(/<ul[^>]*>[\s\S]*?<\/ul>/gi, (match) => {
+    const links = (match.match(/<a /gi) || []).length;
+    const items = (match.match(/<li/gi) || []).length;
+    if (items >= 4 && links / Math.max(items, 1) > 0.5) return ''; // Mostly-link lists
+    return match;
+  });
+  
+  // 3. Detect consecutive images (3+) and wrap in horizontal gallery
+  // Handle figures with optional whitespace/empty elements between them
+  html = html.replace(/((?:<figure[^>]*>[\s\S]*?<\/figure>(?:\s*(?:<p>\s*<\/p>)?\s*)){3,})/gi, (match) => {
+    const figures = match.match(/<figure[^>]*>[\s\S]*?<\/figure>/gi) || [];
+    if (figures.length < 3) return match;
+    return `<div class="img-gallery"><div class="img-gallery-track">${figures.join('')}</div><div class="img-gallery-dots">${figures.map((_,i) => `<span class="gallery-dot${i===0?' active':''}"></span>`).join('')}</div></div>`;
+  });
+  // Also catch consecutive bare <img> tags (shouldn't happen but safety net)
+  html = html.replace(/((?:<img[^>]*>\s*){3,})/gi, (match) => {
+    const imgs = match.match(/<img[^>]*>/gi) || [];
+    if (imgs.length < 3) return match;
+    return `<div class="img-gallery"><div class="img-gallery-track">${imgs.map(i => `<figure>${i}</figure>`).join('')}</div><div class="img-gallery-dots">${imgs.map((_,i) => `<span class="gallery-dot${i===0?' active':''}"></span>`).join('')}</div></div>`;
+  });
+  
+  // 4. Strip images that appear immediately before blockquote text 
+  // Pattern: <figure>...</figure><blockquote>...</blockquote> — the figure is decorative
+  html = html.replace(/<figure[^>]*>[\s\S]*?<\/figure>\s*(<blockquote)/gi, '$1');
+  // Pattern: <figure>..quote-mark..</figure><p>short italic text</p><figure>..quote-mark..</figure>
+  // This catches paired decorative quote images
+  html = html.replace(/<figure[^>]*>[\s\S]*?<\/figure>\s*(<p[^>]*>[^<]{5,200}<\/p>)\s*<figure[^>]*>[\s\S]*?<\/figure>/gi, (match, pTag) => {
+    // If the paragraph between is short, treat as pullquote
+    const text = pTag.replace(/<[^>]+>/g, '').trim();
+    if (text.length < 250) return `<blockquote>${pTag}</blockquote>`;
+    return match; // Long text = probably real content
+  });
+  
+  return stripTrailingRelated(html.trim());
+}
+
+// Strip headings that are links to other articles (BBC cross-links, related)
+function stripTrailingRelated(html) {
+  // Strip h2/h3/h4 that are entirely link text
+  html = html.replace(/<h[2-4][^>]*>\s*<a [^>]*>[\s\S]*?<\/a>\s*<\/h[2-4]>/gi, '');
+  // Strip trailing headings after last paragraph (BBC related headlines)
+  const lastP = html.lastIndexOf('</p>');
+  if (lastP > 0) {
+    const trail = html.slice(lastP + 4);
+    const pH = (trail.match(/<h[2-4]/g) || []).length;
+    const pP = (trail.match(/<p[\s>]/g) || []).length;
+    if (pH > 1 && pP === 0) html = html.slice(0, lastP + 4);
+  }
+  
+  // 6. Convert caption-like paragraphs after figures into figcaptions
+  html = html.replace(/<\/figure>\s*<p[^>]*>\s*(\(?(?:Getty|AP|AFP|Reuters|AAP|Photo|Image|Credit|Source|Supplied|Courtesy|Picture|©|Illustration|Screenshot|ABC News)[^<]{0,200})\s*<\/p>/gi, (match, caption) => {
+    return `<figcaption>${caption.trim()}</figcaption></figure>`;
+  });
+  html = html.replace(/<\/figure>\s*<p[^>]*>\s*<(?:em|i)>(\(?(?:Getty|AP|AFP|Reuters|AAP|Photo|Image|Credit|Source|Supplied|Courtesy|Picture|©|Illustration|Screenshot|ABC News)[^<]{0,200})<\/(?:em|i)>\s*<\/p>/gi, (match, caption) => {
+    return `<figcaption>${caption.trim()}</figcaption></figure>`;
+  });
+  
+  // 7. Strip standalone metadata paragraphs (SBS, news sites)
+  html = html.replace(/<p[^>]*>\s*(?:<(?:em|i|strong|b)>)?\s*(?:For the latest from[^<]{0,200}|Download our app[^<]{0,100}|Get the latest[^<]{0,100})\s*(?:<\/(?:em|i|strong|b)>)?\s*<\/p>/gi, '');
+  html = html.replace(/<p[^>]*>\s*(?:\d+ min(?:ute)? read|Published \d[^<]{0,100}|Updated \d[^<]{0,100}|Source: [^<]{0,100})\s*<\/p>/gi, '');
+  html = html.replace(/<p[^>]*>(?:<[^>]+>)*[^<]*(?:download our app|subscribe to our newsletter)[^<]*(?:<[^>]+>)*<\/p>/gi, '');
+  
+  // 8. Style inline image credits — wrap (Getty Images: X), (AP Photo: X), etc. in styled span
+  html = html.replace(/(\((?:Getty Images|AP Photo|AP|AFP|Reuters|AAP|Photo|Image|Credit|Source|Supplied|Courtesy|Picture|Screenshot|ABC News|BBC)[^)]{0,150}\))/gi, '<span class="img-credit">$1</span>');
+  
+  return html;
+}
+
+function getKnownDomains() { return state.sources.map(s => s.domain).filter(Boolean); }
+
+// Extract a stable key from an image URL for deduplication
+// Handles Guardian CDN, WordPress resizes, generic CDNs
+function imgKey(src) {
+  if (!src) return '';
+  let s = src.split('?')[0].split('#')[0].toLowerCase();
+  // Guardian: extract media hash (e.g. i.guim.co.uk/img/media/HASH/...)
+  const guimMatch = s.match(/\/img\/media\/([a-f0-9]+)/);
+  if (guimMatch) return 'guim-' + guimMatch[1];
+  // ABC AU: extract ID from abc.net.au image paths
+  const abcMatch = s.match(/\/news\/image\/(\d+)/);
+  if (abcMatch) return 'abc-' + abcMatch[1];
+  // Strip WordPress/CDN resize suffixes
+  s = s.replace(/-\d+x\d+(\.\w+)$/, '$1');
+  // Extract filename stem (last path segment without extension)
+  const parts = s.split('/');
+  const file = parts[parts.length - 1] || parts[parts.length - 2] || s;
+  return file.replace(/\.\w{2,5}$/, '');
+}
+// Fix malformed double-URL image srcs (e.g. drive.com.au: /wp-content/uploads/https://media.drive.com.au/...)
+function fixImgUrl(src) {
+  if (!src) return src;
+  const idx = src.indexOf('http', 8); // Look for second http after initial scheme
+  if (idx > 8) return src.slice(idx);
+  return src;
+}
+
+// ============================================================
+// FOR YOU ALGORITHM
+// ============================================================
+function trackEngagement(article, type) {
+  const eng = state.engagement;
+  const w = { click: 1, bookmark: 3, tldr: 2, time: 0.5 }[type] || 1;
+  if (!eng.sources) eng.sources = {};
+  eng.sources[article.source] = (eng.sources[article.source] || 0) + w;
+  if (!eng.categories) eng.categories = {};
+  eng.categories[article.category] = (eng.categories[article.category] || 0) + w;
+  if (!eng.topics) eng.topics = {};
+  (article.topics || []).forEach(t => { eng.topics[t] = (eng.topics[t] || 0) + w; });
+  if (!eng.clicked) eng.clicked = [];
+  if (type === 'click' && !eng.clicked.includes(article.id)) {
+    eng.clicked.push(article.id);
+    if (eng.clicked.length > 200) eng.clicked = eng.clicked.slice(-200);
+  }
+  state.engagement = eng;
+  localStorage.setItem('reader-engagement', JSON.stringify(eng));
+}
+
+function scoreArticle(a) {
+  const eng = state.engagement;
+  let score = 0;
+  const ageHrs = (Date.now() - new Date(a.rawDate || 0).getTime()) / 3600000;
+  score += Math.max(0, 40 - ageHrs * 1.5);
+  const maxSrc = Math.max(1, ...Object.values(eng.sources || {}));
+  score += ((eng.sources?.[a.source] || 0) / maxSrc) * 25;
+  const maxCat = Math.max(1, ...Object.values(eng.categories || {}));
+  score += ((eng.categories?.[a.category] || 0) / maxCat) * 20;
+  const ts = (a.topics || []).map(t => eng.topics?.[t] || 0);
+  const avgT = ts.length > 0 ? ts.reduce((x, y) => x + y, 0) / ts.length : 0;
+  const maxT = Math.max(1, ...Object.values(eng.topics || {}));
+  score += (avgT / maxT) * 15;
+  if ((eng.clicked || []).includes(a.id)) score -= 3;
+  if (a.image) score += 3;
+  return Math.max(0, score);
+}
+
+function rankForYou(articles) {
+  if (Object.keys(state.engagement.sources || {}).length === 0) return diversify(articles);
+  
+  // Session stability: cache the ranked order for 6 hours
+  const cacheKey = 'reader-foryou-cache';
+  const cacheTTL = 6 * 60 * 60 * 1000; // 6 hours
+  try {
+    const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+    if (cached && Date.now() - cached.ts < cacheTTL) {
+      // Re-order articles based on cached ID order
+      const idOrder = new Map(cached.ids.map((id, i) => [id, i]));
+      // Merge: cached order first, new articles (not in cache) appended at end
+      const known = articles.filter(a => idOrder.has(a.id)).sort((a, b) => idOrder.get(a.id) - idOrder.get(b.id));
+      const fresh = articles.filter(a => !idOrder.has(a.id));
+      return [...known, ...fresh];
+    }
+  } catch {}
+  
+  // Score and rank fresh
+  const scored = articles.map(a => ({ ...a, _score: scoreArticle(a) }));
+  scored.sort((a, b) => b._score - a._score);
+  const ranked = diversify(scored);
+  
+  // Cache the order
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), ids: ranked.map(a => a.id) }));
+  } catch {}
+  
+  return ranked;
+}
+
+function diversify(articles) {
+  const result = [], streak = {};
+  for (const a of articles) {
+    if ((streak[a.source] || 0) >= 3) continue;
+    streak[a.source] = (streak[a.source] || 0) + 1;
+    result.push(a);
+    Object.keys(streak).forEach(k => { if (k !== a.source) streak[k] = 0; });
+  }
+  return result;
+}
+
+// ============================================================
+// RSS FETCHING
+// ============================================================
+async function fetchRSS() {
+  const enabled = state.sources.filter(s => s.on);
+  const all = [];
+  const results = await Promise.allSettled(enabled.map(async src => {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch(RSS2JSON + encodeURIComponent(src.feed), { signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (data.status !== 'ok' || !data.items) return [];
+      return data.items.slice(0, 8).map((item, i) => ({
+        id: `${src.id}-${i}`,
+        title: item.title || 'Untitled',
+        excerpt: stripHtml(item.description || item.content || '').slice(0, 300),
+        content: item.content || item.description || '',
+        rssHtml: item.content || item.description || '',
+        author: item.author || src.name,
+        date: fmtDate(item.pubDate),
+        rawDate: item.pubDate,
+        time: timeAgo(item.pubDate),
+        source: src.name,
+        sourceDomain: src.domain,
+        category: src.cat,
+        link: item.link || '#',
+        image: item.thumbnail || item.enclosure?.link || extractImg(item.description || item.content || '') || null,
+        readTime: readTime(item.content || item.description || ''),
+        topics: extractTopics(item.title || '', src.cat),
+        pw: src.pw || false,
+      }));
+    } catch { return []; }
+  }));
+  results.forEach(r => { if (r.status === 'fulfilled') all.push(...r.value); });
+  all.sort((a, b) => new Date(b.rawDate || 0) - new Date(a.rawDate || 0));
+  return all;
+}
+
+// ============================================================
+// FULL ARTICLE FETCHING — two-tier: RSS content first, proxy second
+// ============================================================
+function parseRssContent(htmlStr) {
+  if (!htmlStr || htmlStr.length < 50) return null;
+  const div = document.createElement('div');
+  div.innerHTML = htmlStr;
+  
+  // Use shared cleanup pipeline
+  cleanDom(div);
+  
+  const nodes = div.querySelectorAll('p, h2, h3, h4, blockquote, ul, ol, figure, img');
+  if (nodes.length < 2) {
+    const text = div.textContent.trim();
+    if (text.length > 200) {
+      const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+      let html = '', chunk = '';
+      for (const s of sentences) {
+        chunk += s;
+        if (chunk.length > 250) { html += `<p>${esc(chunk.trim())}</p>`; chunk = ''; }
+      }
+      if (chunk.trim()) html += `<p>${esc(chunk.trim())}</p>`;
+      return postProcessHtml(html);
+    }
+    return null;
+  }
+  
+  // Use shared node processor
+  const result = processNodes(nodes);
+  return result.html.length > 100 ? postProcessHtml(result.html) : null;
+}
+
+async function fetchFullArticle(url) {
+  try {
+    // Total timeout: 12 seconds max for article fetch
+    const result = await Promise.race([
+      (async () => {
+        const html = await fetchViaProxy(url);
+        if (!html) return null;
+        if (isLiveBlog(html, url)) { const lb = extractLiveBlog(html, url); if (lb) return lb; }
+        return extractArticle(html, url);
+      })(),
+      new Promise(resolve => setTimeout(() => resolve(null), 12000))
+    ]);
+    return result;
+  } catch { return null; }
+}
+
+function extractArticle(html, baseUrl) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const base = new URL(baseUrl);
+
+  // Get metadata
+  const pageTitle = doc.querySelector('meta[property="og:title"]')?.content || doc.querySelector('title')?.textContent || '';
+  const ogImage = doc.querySelector('meta[property="og:image"]')?.content || doc.querySelector('meta[name="twitter:image"]')?.content || null;
+  const subtitle = doc.querySelector('meta[property="og:description"]')?.content || doc.querySelector('[class*="standfirst"],[class*="subtitle"],[class*="dek"],[class*="strapline"]')?.textContent?.trim() || '';
+  const author = doc.querySelector('meta[name="author"]')?.content || doc.querySelector('[rel="author"],[class*="byline"] a,[class*="author-name"]')?.textContent?.trim() || '';
+  const pubDate = doc.querySelector('meta[property="article:published_time"]')?.content || doc.querySelector('time[datetime]')?.getAttribute('datetime') || '';
+
+  // Shared DOM cleanup
+  cleanDom(doc);
+
+  // Content area detection
+  const selectors = [
+    'article','[role="article"]','.article-body','.article-content','.post-content',
+    '.entry-content','.story-body','main .content','.c-entry-content','.article__body',
+    '.caas-body','.article__content','.ArticleBody-articleBody','.article-text',
+    '.story__content','.body-copy','.article_body','.article-main','.post-body',
+    '#article-body','#story-body','.content-body','.field-body','.wysiwyg','.prose',
+    '.article-detail','.news-article','.single-post-content','.entry-body',
+    '.editorial-content','.RichTextStoryBody','.ArticleBodyWrapper',
+    '.l-container .article-body','.Page-content','[data-module="ArticleBody"]',
+    '.article-page','.story-content','.post-entry','.td-post-content',
+  ];
+
+  let el = null;
+  for (const sel of selectors) {
+    el = doc.querySelector(sel);
+    if (el && el.textContent.trim().length > 200) break;
+    el = null;
+  }
+  if (!el) {
+    const candidates = [...doc.querySelectorAll('main, .content, #content, .post, .story, [class*="article"], [class*="content"]')];
+    el = candidates.sort((a, b) => b.textContent.length - a.textContent.length)[0] || doc.body;
+  }
+
+  // Fix relative URLs and malformed double-URLs
+  el.querySelectorAll('img').forEach(img => {
+    let src = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-original') || img.getAttribute('data-lazy-src') || (img.getAttribute('srcset') || '').split(',')[0]?.trim()?.split(' ')[0];
+    if (src) {
+      src = fixImgUrl(src);
+      if (src.startsWith('//')) src = 'https:' + src;
+      else if (src.startsWith('/')) src = base.origin + src;
+      img.setAttribute('src', src);
+    }
+  });
+  el.querySelectorAll('a').forEach(a => {
+    let href = a.getAttribute('href');
+    if (href && href.startsWith('/')) a.setAttribute('href', base.origin + href);
+  });
+
+  // Use shared node processor
+  const nodes = el.querySelectorAll('p, h2, h3, h4, figure, blockquote, ul, ol, img, iframe, .twitter-tweet, .instagram-media, [data-datawrapper-src]');
+  const result = processNodes(nodes, { heroKey: ogImage ? imgKey(ogImage) : null });
+
+  if (stripHtml(result.html).length < 100) return null;
+  const clean = postProcessHtml(result.html);
+  return { html: clean, images: result.images, title: pageTitle, ogImage, subtitle, author, pubDate, isLiveBlog: false };
+}
+
+// ============================================================
+// LIVE BLOG DETECTION & FORMATTING
+// ============================================================
+function isLiveBlog(html, url) {
+  // URL patterns
+  if (/\/live\//i.test(url)) return true;
+  if (/\/liveblog\//i.test(url)) return true;
+  // HTML class/element patterns
+  const head = html.slice(0, 8000);
+  if (/liveblog|live-blog|live-feed|live-update|is-live/i.test(head)) return true;
+  if (/data-gu-marker|js-liveblog|LiveBlogPosting/i.test(head)) return true;
+  // Multiple timestamp blocks suggest live blog
+  const timestampCount = (head.match(/\d{1,2}[:.]\d{2}\s*(am|pm|AEST|AEDT|GMT|UTC|BST|ET|PT)/gi) || []).length;
+  if (timestampCount > 3) return true;
+  // Guardian meta tag
+  if (/og:type.*liveblog/i.test(head)) return true;
+  return false;
+}
+
+function extractLiveBlog(html, baseUrl) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const base = new URL(baseUrl);
+
+  const pageTitle = doc.querySelector('meta[property="og:title"]')?.content || doc.querySelector('title')?.textContent || '';
+  const ogImage = doc.querySelector('meta[property="og:image"]')?.content || null;
+
+  // Remove junk
+  doc.querySelectorAll('script,style,nav,footer,header,.ad,.ads,aside,.sidebar,.comments,noscript,iframe,.cookie-banner,.consent').forEach(e => e.remove());
+
+  // Try to find live blog entries — various CMS patterns
+  const entrySelectors = [
+    // Guardian-specific
+    '[data-gu-marker="body"]', '.block', 'div[id^="block-"]', '.live-blog-blocks .block',
+    '[data-liveblog-entry]', '.blog-post', '.live-blog__block', '.block--content',
+    '.liveblock', '.live-feed-item', '.timeline-item',
+    '.liveblog-entry', '.pinboard-item', '.key-event', '.live-blog-entry',
+    'article.block', '.update-entry', '[data-key-event]',
+    // Generic timestamp-based blocks
+    '.timestamp-block', '.update', '.event-block',
+  ];
+
+  let entries = [];
+  for (const sel of entrySelectors) {
+    const found = doc.querySelectorAll(sel);
+    if (found.length > 2) {
+      entries = [...found];
+      break;
+    }
+  }
+
+  if (entries.length < 2) {
+    // Fallback: find divs with IDs that look like timestamped blocks
+    const blockDivs = [...doc.querySelectorAll('div[id^="block-"], div[id^="liveblog-"], div[id^="update-"]')];
+    if (blockDivs.length > 2) entries = blockDivs;
+  }
+
+  if (entries.length < 2) {
+    // Fallback: look for timestamp + content patterns
+    return null; // Let normal extraction handle it
+  }
+
+  let blogHtml = '';
+  const seenKeys = new Set();
+  // Process ALL entries, not just first 30
+  entries.forEach(entry => {
+    // Try to find timestamp
+    const timeEl = entry.querySelector('time, .block-time, .timestamp, [data-time], .live-blog__time, .block__time, .block-time__absolute, .content__dateline-time, aside time');
+    const timeText = timeEl?.textContent?.trim() || timeEl?.getAttribute('datetime')?.replace('T',' ').slice(0,16) || '';
+
+    // Check if key event
+    const isKey = entry.matches('[data-key-event], .key-event, .is-key-event, .block--key-event') ||
+                  entry.querySelector('.key-event, [data-key-event], .block--key-event-badge') !== null ||
+                  entry.getAttribute('data-is-key-event') === 'true';
+
+    // Get content — try various content containers
+    const bodyEl = entry.querySelector('.block-body, .block-content, .live-blog__body, .block__body, .block-elements, .block__content') || entry;
+    const title = entry.querySelector('h2, h3, .block-title, .block__title, .block-elements h2');
+
+    let entryContent = '';
+    if (title) entryContent += `<h3>${title.textContent.trim()}</h3>`;
+
+    bodyEl.querySelectorAll('p, img, blockquote').forEach(node => {
+      if (node.tagName === 'IMG') {
+        let src = node.getAttribute('src') || node.getAttribute('data-src') || '';
+        if (src.startsWith('/')) src = base.origin + src;
+        if (src && !isJunkImg(src) && !isAuthorImg(node)) {
+          entryContent += `<figure><img src="${esc(src)}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"></figure>`;
+        }
+      } else {
+        const text = node.innerHTML.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'');
+        if (stripHtml(text).trim().length > 5) entryContent += `<p>${text}</p>`;
+      }
+    });
+
+    if (!entryContent.trim()) return;
+
+    const keyTag = isKey ? '<div style="display:inline-block;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--accent);color:#fff;margin-bottom:10px">Key Event</div>' : '';
+    const timeTag = timeText ? `<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;font-family:'DM Sans',sans-serif;letter-spacing:.02em">${esc(timeText)}</div>` : '';
+
+    blogHtml += `<div style="padding:20px;margin-bottom:16px;border-radius:12px;background:var(--bg-alt);border:1px solid var(--border)">${keyTag}${timeTag}${entryContent}</div>`;
+  });
+
+  if (!blogHtml) return null;
+
+  const header = `<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.15);margin-bottom:20px"><span style="width:8px;height:8px;border-radius:50%;background:#DC2626;animation:pulse 2s infinite"></span><span style="font-size:12px;font-weight:600;color:#DC2626;font-family:'DM Sans',sans-serif">LIVE</span></div>`;
+
+  return { html: header + blogHtml, images: [], title: pageTitle, ogImage, isLiveBlog: true };
+}
+
+function isJunkImg(src) {
+  // Tracking pixels, icons, avatars, favicons
+  if (/1x1|pixel|tracking|spacer|badge|emoji|favicon|gravatar/i.test(src)) return true;
+  // Very small explicit thumbnails (under 100px dimension in URL)
+  if (/thumb(nail)?-\d{1,2}x\d{1,2}\./i.test(src)) return true;
+  // Logos and icons
+  if (/\/(logo|icon|avatar|favicon)[^\/]*\.(png|svg|gif|ico)/i.test(src)) return true;
+  // Decorative elements: quote marks, pullquote graphics, ornaments
+  if (/quote|quotation|blockquote.*icon|pull-?quote|ornament|decoration|divider|separator/i.test(src)) return true;
+  // SVG data URIs (inline decorative elements)
+  if (src.startsWith('data:image/svg')) return true;
+  // Guardian static/system images (decorative graphics, inline elements)
+  if (/\/sys-images\/|\/static\/.*inline|\/img\/static\//i.test(src)) return true;
+  // Guardian inline elements (quote marks, rule lines, etc.)
+  if (/inline-garnett|inline-quote|inline-icon|opening-quote|closing-quote/i.test(src)) return true;
+  // Vox Media decorative elements
+  if (/duet\/.*decoration|chorus-image.*icon/i.test(src)) return true;
+  return false;
+}
+
+// Check if an image element is a decorative/non-content image
+function isDecorativeImg(imgEl) {
+  const src = (imgEl.getAttribute('src') || '').toLowerCase();
+  const alt = (imgEl.getAttribute('alt') || '').toLowerCase();
+  const cls = (imgEl.className || '').toLowerCase();
+  const role = (imgEl.getAttribute('role') || '').toLowerCase();
+  // Role="presentation" or empty alt = decorative
+  if (role === 'presentation' || (imgEl.hasAttribute('alt') && alt === '')) return true;
+  // CSS class hints
+  if (/decoration|ornament|quote-?mark|pull-?quote-?img|icon|inline-|garnett/i.test(cls)) return true;
+  // Very small inline images (likely icons/bullets)
+  const w = parseInt(imgEl.getAttribute('width') || '0');
+  const h = parseInt(imgEl.getAttribute('height') || '0');
+  if (w > 0 && w < 50 && h > 0 && h < 50) return true;
+  // SVG files are almost always decorative in article context
+  if (src.endsWith('.svg') || src.includes('.svg?')) return true;
+  // Parent is a blockquote, pullquote, or aside
+  let el = imgEl.parentElement;
+  for (let i = 0; i < 3 && el; i++) {
+    const pCls = (el.className || '') + ' ' + (el.tagName || '');
+    if (/blockquote|pullquote|quote|aside/i.test(pCls)) return true;
+    // Guardian inline elements
+    if (/inline-|garnett-/i.test(el.className || '')) return true;
+    el = el.parentElement;
+  }
+  // Guardian-specific: img inside span.inline-* elements
+  if (imgEl.closest && imgEl.closest('[class*="inline-"]')) return true;
+  return false;
+}
+
+// Check if an image element is likely an author bio pic
+function isAuthorImg(imgEl) {
+  // Check parent chain for author-related classes/elements
+  let el = imgEl.parentElement;
+  for (let i = 0; i < 4 && el; i++) {
+    const cls = (el.className || '').toLowerCase();
+    const id = (el.id || '').toLowerCase();
+    if (/author|byline|bio|profile|avatar|contributor|journalist|writer|staff/i.test(cls + ' ' + id)) return true;
+    if (el.tagName === 'FIGURE' || el.tagName === 'DIV') {
+      const style = el.getAttribute('style') || '';
+      if (/border-radius\s*:\s*50%/i.test(style)) return true;
+    }
+    el = el.parentElement;
+  }
+  // Check image's own attributes
+  const alt = (imgEl.getAttribute('alt') || '').toLowerCase();
+  const cls = (imgEl.className || '').toLowerCase();
+  const src = (imgEl.getAttribute('src') || '').toLowerCase();
+  if (/author|byline|avatar|profile|headshot|portrait|staff|journalist/i.test(alt + ' ' + cls)) return true;
+  if (/headshot|avatar|portrait|staff[-_]photo|author[-_]image/i.test(src)) return true;
+  // Check if image is followed by what looks like a person's name (2-3 capitalized words)
+  const nextEl = imgEl.closest('figure, div')?.nextElementSibling || imgEl.nextElementSibling;
+  if (nextEl) {
+    const nextText = nextEl.textContent?.trim() || '';
+    // Short text that looks like "Firstname Lastname" pattern
+    if (nextText.length > 3 && nextText.length < 50 && /^[A-Z][a-z]+ [A-Z][a-z]+(\s[A-Z][a-z]+)?$/.test(nextText)) {
+      // Check if image is portrait-shaped or small
+      const w = parseInt(imgEl.getAttribute('width') || '0');
+      const h = parseInt(imgEl.getAttribute('height') || '0');
+      if ((w > 0 && w < 400 && h > 0 && h > w * 0.8) || (w === 0 && h === 0)) return true;
+    }
+  }
+  // Check explicit small square images (avatars)
+  const w = parseInt(imgEl.getAttribute('width') || '0');
+  const h = parseInt(imgEl.getAttribute('height') || '0');
+  if (w > 0 && w < 80 && h > 0 && h < 80) return true;
+  return false;
+}
+
+// Deduplicate images - compare URLs ignoring query params and size suffixes
+function isSameImage(url1, url2) {
+  if (!url1 || !url2) return false;
+  const clean = u => u.split('?')[0].replace(/-\d+x\d+/, '').replace(/\/s\d+\//, '/').toLowerCase();
+  return clean(url1) === clean(url2);
+}
+
+// ============================================================
+// ARCHIVE FALLBACK CHAIN
+// ============================================================
+const ARCHIVE_STEPS = [
+  { id:'wayback', label:'Wayback Machine', icon:'📦' },
+  { id:'archiveToday', label:'Archive.today', icon:'📋' },
+  { id:'googleCache', label:'Google Cache', icon:'🔍' },
+  { id:'reader', label:'Reader Mode', icon:'📖' },
+];
+
+async function runArchiveChain(url) {
+  // Step 1: Wayback — don't render each step, just update state
+  state.archiveStep = 0;
+  try {
+    const r = await fetch(`https://archive.org/wayback/available?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(5000) });
+    const d = await r.json();
+    if (d?.archived_snapshots?.closest?.available) {
+      return { found: true, method: 'wayback', url: d.archived_snapshots.closest.url, step: 0 };
+    }
+  } catch {}
+
+  // Step 2: Archive.today
+  state.archiveStep = 1;
+  await new Promise(r => setTimeout(r, 200));
+
+  // Step 3: Google Cache
+  state.archiveStep = 2;
+  await new Promise(r => setTimeout(r, 200));
+
+  state.archiveStep = 3;
+  return {
+    found: false,
+    method: 'multi',
+    options: [
+      { id:'archiveToday', url:`https://archive.ph/newest/${url}`, label:'Archive.today' },
+      { id:'googleCache', url:`https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}`, label:'Google Cache' },
+    ],
+  };
+}
+
+// ============================================================
+// ANTHROPIC API
+// ============================================================
+async function fetchTldr(title, source) {
+  return callClaude(`Find and summarise this article in 2-3 concise sentences: "${title}" from ${source}. Be factual and brief.`, { maxTokens: 300, webSearch: true });
+}
+
+async function fetchDigest(articles) {
+  const hl = articles.slice(0,8).map((a,i) => `${i+1}. [${a.source}] ${a.title}`).join('\n');
+  return callClaude(`You are a concise news briefing writer. Given these headlines, write a 2-3 paragraph briefing that connects the key themes and tells the reader what matters right now. Be conversational but informative. No headers or bullets.\n\nHeadlines:\n${hl}\n\nRespond with just the briefing text.`, { maxTokens: 600 });
+}
+
+// ============================================================
+// REVIEWS — Dynamic system, no hardcoded data
+// ============================================================
+let REVIEWS = JSON.parse(localStorage.getItem('athere-reviews') || 'null') || [];
+let BESTOF = JSON.parse(localStorage.getItem('athere-bestof') || 'null') || [];
+const REVIEWS_TTL = 12 * 60 * 60 * 1000; // 12 hours
+const REVIEWS_TS = parseInt(localStorage.getItem('athere-reviews-ts') || '0');
+const REVIEW_CATEGORIES = ['All','Phones','Laptops','Cameras','Audio','Gaming','Wearables'];
+let activeReviewCat = 'All';
+
+function getFilteredReviews() {
+  if (activeReviewCat === 'All') return REVIEWS;
+  return REVIEWS.filter(r => (r.category || '').toLowerCase() === activeReviewCat.toLowerCase());
+}
+
+async function fetchDynamicReviews() {
+  if (REVIEWS.length > 0 && Date.now() - REVIEWS_TS < REVIEWS_TTL) return;
+  if (state.reviewsLoading) return; // Already in progress
+  state.reviewsLoading = true;
+  state.reviewsFailed = false;
+  if (state.activeCat === 'Reviews') render();
+  try {
+    const text = await callClaude(`Search for the 8-10 most recently reviewed tech products across these categories: smartphones, laptops, cameras, headphones/audio, gaming devices, and wearables. Focus on products reviewed in the last 2-3 months.
+
+For each product, find the consensus review score and key verdicts from major publications (The Verge, CNET, Tom's Guide, RTINGS, DPReview, TechRadar, Wired, etc).
+
+Return ONLY valid JSON (no markdown, no backticks):
+{"reviews":[{"id":"r1","title":"Product Name","subtitle":"One-line verdict","score":8.5,"category":"Phones","date":"Feb 2026","time":"2 weeks ago","pros":["pro1","pro2","pro3"],"cons":["con1","con2"],"scores":[{"pub":"The Verge","s":8.5,"v":"One sentence verdict","url":"https://url"}],"specs":[{"l":"Key Spec","v":"Value","d":"Detail"}],"summary":"2-3 sentence summary of consensus opinion.","verdict":"Clear buy/wait/skip recommendation."}],"bestof":[{"category":"Best Phone","pick":"Name","runner":"Runner Up","why":"Why in 1 sentence"},{"category":"Best Laptop","pick":"Name","runner":"Runner Up","why":"Why"},{"category":"Best Camera","pick":"Name","runner":"Runner Up","why":"Why"},{"category":"Best Headphones","pick":"Name","runner":"Runner Up","why":"Why"},{"category":"Best Gaming","pick":"Name","runner":"Runner Up","why":"Why"}]}
+
+Categories MUST be one of: Phones, Laptops, Cameras, Audio, Gaming, Wearables.
+Scores out of 10. Prices in AUD. Use real review URLs.`, { maxTokens: 4000, webSearch: true });
+    if (text) {
+      const clean = text.replace(/```json|```/g,'').trim();
+      const parsed = JSON.parse(clean);
+      if (parsed.reviews && parsed.reviews.length > 0) {
+        REVIEWS = parsed.reviews.map((r, i) => ({...r, id: r.id || `rd${i}`}));
+        BESTOF = parsed.bestof || [];
+        localStorage.setItem('athere-reviews', JSON.stringify(REVIEWS));
+        localStorage.setItem('athere-bestof', JSON.stringify(BESTOF));
+        localStorage.setItem('athere-reviews-ts', String(Date.now()));
+      } else {
+        state.reviewsFailed = true;
+      }
+    } else {
+      state.reviewsFailed = true;
+    }
+  } catch(e) { console.warn('Reviews fetch:', e); state.reviewsFailed = true; }
+  state.reviewsLoading = false;
+  render();
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function stripHtml(h){const t=document.createElement('div');t.innerHTML=h;return t.textContent||t.innerText||''}
+function extractImg(h){const m=h.match(/<img[^>]+src=["']([^"']+)["']/);return m?m[1]:null}
+function fmtDate(d){if(!d)return'';return new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}
+function timeAgo(d){if(!d)return'';const m=Math.floor((Date.now()-new Date(d).getTime())/60000);if(m<1)return'Just now';if(m<60)return m+'m ago';const h=Math.floor(m/60);if(h<24)return h+'h ago';return Math.floor(h/24)+'d ago'}
+function readTime(t){return Math.max(1,Math.ceil(stripHtml(t).split(/\s+/).length/250))+' min'}
+function extractTopics(title,cat){const t=title.toLowerCase();const topics=[cat.toLowerCase()];['apple','google','ai','samsung','tesla','nba','f1','camera','sony','nintendo','microsoft','meta','fujifilm','openai','anthropic','spacex','amazon','android','iphone','pixel','waymo','ford','porsche','mini','bmw','photography','lightroom','canon','nikon','sigma'].forEach(k=>{if(t.includes(k))topics.push(k)});return topics}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function getDomain(url){try{return new URL(url).hostname.replace('www.','')}catch{return''}}
+function isKnownDomain(url){const d=getDomain(url);return getKnownDomains().some(k=>d.includes(k))}
+
+// Strip the first image from content if it matches the article hero
+function stripDuplicateHeroFromContent(html, heroUrl) {
+  if (!heroUrl) return html;
+  const heroK = imgKey(heroUrl);
+  if (heroK.length < 3) return html;
+  
+  // Check first 800 chars for a <figure> containing the hero
+  const figStart = html.indexOf('<figure');
+  if (figStart !== -1 && figStart < 800) {
+    const figEnd = html.indexOf('</figure>', figStart);
+    if (figEnd !== -1) {
+      const figHtml = html.slice(figStart, figEnd + 9);
+      const srcMatch = figHtml.match(/src="([^"]+)"/);
+      if (srcMatch && imgKey(srcMatch[1]) === heroK) {
+        return html.slice(0, figStart) + html.slice(figEnd + 9);
+      }
+    }
+  }
+  
+  // Check first 800 chars for a standalone <img> matching hero
+  const firstImgMatch = html.slice(0, 800).match(/<img[^>]+src="([^"]+)"[^>]*>/);
+  if (firstImgMatch && imgKey(firstImgMatch[1]) === heroK) {
+    return html.replace(firstImgMatch[0], '');
+  }
+  
+  return html;
+}
+
+// Check if body HTML already contains an image matching the hero
+function bodyHasHeroImage(bodyHtml, heroUrl) {
+  if (!heroUrl || !bodyHtml) return false;
+  const heroK = imgKey(heroUrl);
+  if (heroK.length < 3) return false;
+  // Check first 2000 chars of body for img tags
+  const imgMatches = bodyHtml.slice(0, 2000).match(/src="([^"]+)"/g) || [];
+  for (const m of imgMatches) {
+    const src = m.slice(5, -1);
+    if (imgKey(src) === heroK) return true;
+  }
+  return false;
+}
+
+// ============================================================
+// PERSISTENCE
+// ============================================================
+function saveBookmarks(){localStorage.setItem('reader-bookmarks',JSON.stringify(state.bookmarks))}
+function saveSources(){localStorage.setItem('reader-sources',JSON.stringify(state.sources))}
+function saveDark(){localStorage.setItem('reader-dark',state.darkMode)}
+
+function toggleBookmark(a){
+  const i=state.bookmarks.findIndex(b=>b.id===a.id);
+  if(i>=0)state.bookmarks.splice(i,1);
+  else{state.bookmarks.unshift(a);trackEngagement(a,'bookmark')}
+  saveBookmarks();render();
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+const $=s=>document.querySelector(s);
+const app=()=>$('#app');
+
+let _renderRAF=null;
+function render(){
+  if(_renderRAF)cancelAnimationFrame(_renderRAF);
+  _renderRAF=requestAnimationFrame(_doRender);
+}
+function renderNow(){_doRender()} // For cases that need immediate render
+function _doRender(){
+  _renderRAF=null;
+  const s=document.createElement('div');
+  s.className=`app-shell${state.darkMode?' dark':''}`;
+  document.body.classList.toggle('dark-bg', state.darkMode);
+  s.innerHTML=renderHeader()+renderCatTabs()+renderFeed()+renderNav();
+  if(state.selectedArticle)s.innerHTML+=renderReadingView();
+  if(state.selectedReview)s.innerHTML+=renderReviewView();
+  if(state.showSearch)s.innerHTML+=renderSearch();
+  app().innerHTML='';
+  app().appendChild(s);
+  bindEvents();
+}
+
+function renderHeader(){
+  const titles={feed:'@here',saved:'Saved',sources:'Sources',settings:'Settings'};
+  const searchBtn=state.activeTab==='feed'?`<button class="icon-btn" data-action="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>`:'';
+  const dIcon=state.darkMode?'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>':'<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+  const w = state.weather;
+  const weatherHtml = w ? `<div class="header-weather">${w.icon} ${w.temp}°${w.rain > 0 ? ` <span class="rain-chance">💧${w.rain}%</span>` : ''}</div>` : '';
+  const meta=state.activeTab==='feed'?`<div class="header-meta">${new Date().toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'})} · ${state.loading?'Loading...':state.articles.length+' articles'}</div>`:'';
+  // Add home button when on non-feed tabs (for tablet)
+  const homeBtn = state.activeTab !== 'feed' ? `<button class="icon-btn" data-action="go-feed" style="margin-right:auto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></button>` : '';
+  return`<div class="header"><div class="header-row">${homeBtn}<h1>${titles[state.activeTab]}</h1><div style="flex:1"></div>${weatherHtml}<div class="header-btns">${searchBtn}<button class="icon-btn" data-action="dark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${dIcon}</svg></button></div></div>${meta}</div>`;
+}
+
+function renderCatTabs(){
+  if(state.activeTab!=='feed')return'';
+  return`<div class="cat-tabs">${CATEGORIES.map(c=>`<button class="cat-tab${state.activeCat===c?' active':''}" data-cat="${c}">${c}</button>`).join('')}</div>`;
+}
+
+function renderFeed(){
+  let c='';
+  if(state.activeTab==='feed'){
+    if(state.loading){
+      c=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div></div>`;
+    } else if(state.activeCat==='Reviews'){
+      // NEVER call fetchDynamicReviews from inside render — that causes infinite loops
+      
+      if(state.reviewsLoading && REVIEWS.length === 0){
+        c+=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div><div style="font-size:13px;color:var(--tt);margin-top:16px">Searching for trending reviews...</div><div style="font-size:11px;color:var(--tm);margin-top:4px">This may take a moment</div></div>`;
+      } else if(REVIEWS.length === 0){
+        // Either failed or never fetched — show manual load button
+        c+=`<div style="text-align:center;padding:60px 20px;color:var(--tt)"><div style="font-size:32px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:4px">${state.reviewsFailed ? 'Reviews unavailable' : 'No reviews loaded'}</div><div style="font-size:12px;margin-bottom:16px">${state.reviewsFailed ? 'Proxy required — deploy worker.js to enable' : 'Tap below to discover trending tech'}</div><button onclick="state.reviewsFailed=false;fetchDynamicReviews()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">${state.reviewsFailed ? '↻ Retry' : 'Load Reviews'}</button></div>`;
+      } else {
+        // Category filter tabs
+        c+=`<div class="cat-tabs" style="margin-bottom:16px">${REVIEW_CATEGORIES.map(cat=>`<button class="cat-tab${activeReviewCat===cat?' active':''}" data-reviewcat="${cat}">${cat}</button>`).join('')}</div>`;
+        
+        // Best Of section (only on All tab)
+        if(activeReviewCat==='All' && BESTOF.length>0){
+          c+=`<div style="background:var(--bg-alt);border-radius:14px;padding:16px;margin-bottom:20px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:10px">🏆 Editor's Picks</div>`;
+          c+=BESTOF.map(b=>`<div style="display:flex;align-items:baseline;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--tt);min-width:90px;flex-shrink:0">${esc(b.category)}</div><div><span style="font-weight:600;font-size:13px;color:var(--text)">${esc(b.pick)}</span><span style="font-size:12px;color:var(--ts)"> · ${esc(b.why)}</span></div></div>`).join('');
+          c+=`</div>`;
+        }
+        
+        // Refresh + count
+        const filtered = getFilteredReviews();
+        c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div class="section-label">${filtered.length} Review${filtered.length!==1?'s':''}</div><button onclick="localStorage.removeItem('athere-reviews');localStorage.removeItem('athere-reviews-ts');REVIEWS=[];BESTOF=[];state.reviewsFailed=false;fetchDynamicReviews()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">↻ Refresh</button></div>`;
+        
+        // Review cards as news-like feed
+        if(filtered.length === 0){
+          c+=`<div style="text-align:center;padding:40px 20px;color:var(--tt)">No reviews in ${activeReviewCat}</div>`;
+        } else {
+          filtered.forEach((r, i) => {
+            const sc=r.score>=8.5?'var(--success)':r.score>=7?'var(--warn)':'var(--accent)';
+            const srcCount = (r.scores||[]).length;
+            if(i === 0) {
+              // Featured first review
+              c+=`<div class="review-card" data-review="${r.id}" style="margin-bottom:16px">
+                ${r.image?`<img class="review-img" src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none'">`:''}
+                <div style="display:flex;align-items:center;gap:8px;margin:12px 0 6px">
+                  <div class="review-score-pill" style="background:${sc}12;border:1px solid ${sc}25;color:${sc}">${r.score}/10</div>
+                  <span style="font-size:11px;color:var(--tt)">${esc(r.category||'')} · ${srcCount} source${srcCount!==1?'s':''} · ${esc(r.time||r.date||'')}</span>
+                </div>
+                <div class="review-title" style="font-size:20px;margin-bottom:4px">${esc(r.title)}</div>
+                <div class="review-subtitle">${esc(r.subtitle)}</div>
+              </div>`;
+            } else {
+              // Compact row cards
+              c+=`<div class="review-card card-row" data-review="${r.id}" style="display:flex;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer">
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                    <div class="review-score-pill" style="background:${sc}12;border:1px solid ${sc}25;color:${sc};font-size:11px;padding:2px 7px">${r.score}</div>
+                    <span style="font-size:11px;color:var(--tt)">${esc(r.category||'')} · ${esc(r.time||r.date||'')}</span>
+                  </div>
+                  <div style="font-family:'Instrument Serif',Georgia,serif;font-size:17px;line-height:1.25;color:var(--text)">${esc(r.title)}</div>
+                  <div style="font-size:12px;color:var(--ts);margin-top:2px">${esc(r.subtitle)}</div>
+                </div>
+                ${r.image?`<img src="${esc(r.image)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;flex-shrink:0" loading="lazy" onerror="this.style.display='none'">`:''}
+              </div>`;
+            }
+          });
+        }
+      }
+    } else {
+      const filtered=state.activeCat==='For You'?rankForYou(state.articles):state.articles.filter(a=>a.category===state.activeCat);
+      if(state.activeCat==='For You'&&filtered.length>0) c+=renderDigest();
+      if(!filtered.length){
+        c+=`<div style="text-align:center;padding:60px 20px;color:var(--tt)">No articles in this category.</div>`;
+      } else {
+        // Dynamic layout: featured card, then mix of rows and medium cards
+        const f=filtered[0];
+        const pw=f.pw?`<span class="pw-badge paywalled"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Paywall</span>`:'';
+        c+=`<div class="card card-featured" data-article="${f.id}">${f.image?`<img src="${esc(f.image)}" alt="" loading="lazy" onerror="this.style.display='none'">`:''}
+          <div class="card-meta"><span class="card-source">${esc(f.source)}</span><span class="card-time">· ${esc(f.time)}</span>${pw}</div>
+          <div class="card-title">${esc(f.title)}</div>
+          <div class="card-excerpt">${esc(f.excerpt)}</div>
+          <div class="card-byline">${esc(f.author)} · ${f.readTime} read</div></div>`;
+        if(filtered.length>1){
+          c+='<div class="divider"></div>';
+          filtered.slice(1).forEach((a, i) => {
+            const p=a.pw?`<span class="pw-badge paywalled"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>`:'';
+            // Every 5th article gets a medium (half-featured) card with image on top
+            if (i > 0 && i % 5 === 4 && a.image) {
+              c+=`<div class="card card-medium" data-article="${a.id}"><img src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none'">
+                <div class="card-meta"><span class="card-source">${esc(a.source)}</span><span class="card-time">· ${esc(a.time)}</span>${p}</div>
+                <div class="card-title">${esc(a.title)}</div>
+                <div class="card-byline">${esc(a.author)} · ${a.readTime}</div></div>`;
+            } else {
+              c+=`<div class="card card-row" data-article="${a.id}"><div class="card-body"><div class="card-meta"><span class="card-source">${esc(a.source)}</span><span class="card-time">· ${esc(a.time)}</span>${p}</div><div class="card-title">${esc(a.title)}</div><div class="card-byline">${esc(a.author)} · ${a.readTime}</div></div>${a.image?`<img src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none'">`:''}
+              </div>`;
+            }
+          });
+        }
+      }
+    }
+  } else if(state.activeTab==='saved') c=renderSaved();
+  else if(state.activeTab==='sources') c=renderSources();
+  else if(state.activeTab==='settings') c=renderSettings();
+  return`<div class="feed">${c}</div>`;
+}
+
+function renderDigest(){
+  const h=new Date().getHours();
+  const cycle=h<12?'morning':'evening', greet=h<12?'Morning':h<17?'Afternoon':'Evening', icon=cycle==='morning'?'☀️':'🌙';
+  let body='';
+  if(state.digestOpen){
+    if(state.digestLoading) body=`<div class="loading-dots" style="padding:12px 0">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.15}s infinite"></div>`).join('')}<span style="font-size:12px;color:var(--tt);margin-left:8px">Generating briefing...</span></div>`;
+    else if(state.digestText) body=`<div class="digest-text">${esc(state.digestText)}</div>`;
+    body=`<div class="digest-body"><div style="height:1px;background:var(--border);margin-bottom:16px"></div>${body}</div>`;
+  }
+  return`<div class="digest"><button class="digest-header" data-action="digest"><div><div class="digest-label">${icon} ${cycle} briefing</div><div class="digest-title">${greet}, Harry</div><div class="digest-sub">${state.articles.length} stories · ${state.sources.filter(s=>s.on).length} sources</div></div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="transform:${state.digestOpen?'rotate(180deg)':'none'};transition:.2s;flex-shrink:0"><path d="M6 9l6 6 6-6"/></svg></button>${body}</div>`;
+}
+
+function renderReviewCard(r){
+  const sc=r.score>=8.5?'var(--success)':'var(--warn)';
+  return`<div class="review-card" data-review="${r.id}">
+    <img class="review-img" src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none'">
+    <div class="review-header"><div class="review-score-pill" style="background:${sc}12;border:1px solid ${sc}25;color:${sc}">${r.score}</div><div><div class="review-meta">${esc(r.time)} · ${r.scores.length} reviews</div><div class="review-title">${esc(r.title)}</div></div></div>
+    <div class="review-subtitle">${esc(r.subtitle)}</div></div>`;
+}
+
+function renderSaved(){
+  if(!state.bookmarks.length)return`<div class="empty-state"><div class="emoji">📑</div><h2>No saved articles</h2><p>Tap the bookmark icon on any article to save it here.</p></div>`;
+  return`<div class="section-label">${state.bookmarks.length} saved</div>`+
+    state.bookmarks.map(a=>`<div class="saved-item"><div class="saved-body" data-article="${a.id}"><div class="card-source" style="margin-bottom:4px">${esc(a.source)} · ${esc(a.time)}</div><div style="font-family:'Instrument Serif',Georgia,serif;font-size:16px;line-height:1.3;color:var(--text)">${esc(a.title)}</div></div>${a.image?`<img src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none'" data-article="${a.id}">`:''}
+      <button class="saved-remove" data-remove="${a.id}">✕</button></div>`).join('');
+}
+
+function renderSources(){
+  const cats=[...new Set(state.sources.map(s=>s.cat))];
+  const chain=`<div class="fc-explainer">${['Wayback','Archive.today','Cache','Reader'].map((s,i)=>`<span class="fc-step ${i===0?'first':'rest'}">${s}</span>${i<3?'<svg class="fc-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>':''}`).join('')}</div>`;
+  
+  // Source search/discovery
+  const searchHtml=`<div style="margin-bottom:16px">
+    <input type="text" id="source-search" placeholder="Search for sources to add..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-alt);color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none" autocomplete="off">
+    <div id="source-search-results"></div>
+  </div>`;
+  
+  let addHtml='';
+  if(state.showAddSource){
+    addHtml=`<div class="add-source-form" id="add-source-form"><label>Source Name</label><input type="text" id="add-name" placeholder="e.g. Hacker News" autocomplete="off"><label>RSS Feed URL</label><input type="url" id="add-feed" placeholder="https://example.com/feed.xml" autocomplete="off"><label>Category</label><select id="add-cat">${CATEGORIES.filter(c=>c!=='For You'&&c!=='Reviews').map(c=>`<option value="${c}">${c}</option>`).join('')}<option value="Custom">Custom</option></select><label>Paywalled?</label><select id="add-paywall"><option value="no">No</option><option value="yes">Yes</option></select><div class="form-row" style="margin-top:4px"><button class="btn btn-secondary" data-action="cancel-add-source">Cancel</button><button class="btn btn-primary" data-action="save-add-source">Add Source</button></div></div>`;
+  } else {
+    addHtml=`<button class="add-source-btn" data-action="show-add-source"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add Custom Source</button>`;
+  }
+  return`<p style="font-size:13px;color:var(--ts);margin-bottom:12px;line-height:1.5">Toggle sources on/off. Paywalled sources auto-bypass via:</p>${chain}${searchHtml}${addHtml}`+
+    cats.map(cat=>`<div style="margin-bottom:20px"><div class="section-label">${cat}</div>${
+      state.sources.filter(s=>s.cat===cat).map(s=>{
+        const pwTag=s.pw?`<span class="pw-badge paywalled" style="font-size:9px;padding:1px 5px">PAYWALL</span>`:'';
+        const customTag=s.custom?`<span class="source-custom-badge">CUSTOM</span>`:'';
+        const del=s.custom?`<button class="source-delete" data-delete-source="${s.id}">✕</button>`:'';
+        return`<div class="source-row"><span class="source-name${s.on?'':' off'}" data-source="${s.id}">${esc(s.name)}${pwTag}${customTag}</span><div style="display:flex;align-items:center;gap:4px">${del}<div class="toggle ${s.on?'on':'off'}" data-source="${s.id}"><div class="toggle-knob"></div></div></div></div>`;
+      }).join('')
+    }</div>`).join('');
+}
+
+function renderSettings(){
+  const eng=state.engagement;
+  const hasEng=Object.keys(eng.sources||{}).length>0;
+  const topS=hasEng?Object.entries(eng.sources||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([s])=>s).join(', '):'No data yet';
+  const topC=hasEng?Object.entries(eng.categories||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([c])=>c).join(', '):'No data yet';
+  return`<div class="section-label">Appearance</div>
+    <div class="source-row" data-action="dark"><span class="source-name">${state.darkMode?'🌙 Dark Mode':'☀️ Light Mode'}</span><div class="toggle ${state.darkMode?'on':'off'}"><div class="toggle-knob"></div></div></div>
+    <div style="margin-top:28px"><div class="section-label">For You Algorithm</div>
+    <div class="setting-row"><div class="setting-label">📊 Your top sources</div><div class="setting-desc">${topS}</div></div>
+    <div class="setting-row"><div class="setting-label">🏷️ Your top categories</div><div class="setting-desc">${topC}</div></div>
+    <div class="setting-row"><div class="setting-label">🧠 How it works</div><div class="setting-desc">Recency (40%) + source affinity (25%) + category (20%) + topics (15%). Learns from clicks, bookmarks, and TL;DR usage. Diversity enforced.</div></div>
+    <div style="margin-top:28px"><div class="section-label">About</div>
+    <div class="setting-row"><div class="setting-label">📱 Version</div><div class="setting-desc">${APP_VERSION} · ${state.sources.length} sources · ${state.sources.filter(s=>s.on).length} active</div></div>
+    ${hasEng?`<div style="margin-top:8px"><button class="tb-btn" data-action="reset-engagement" style="padding:8px 14px">Reset Algorithm</button></div>`:''}
+    </div>`;
+}
+
+function renderNav(){
+  const items=[
+    {id:'feed',label:'Feed',d:'M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16'},
+    {id:'saved',label:'Saved',d:'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z'},
+    {id:'sources',label:'Sources',d:'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z'},
+    {id:'settings',label:'Settings',d:'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z'},
+  ];
+  const badge=state.bookmarks.length>0?`<div class="nav-badge">${state.bookmarks.length}</div>`:'';
+  return`<div class="bottom-nav">${items.map(it=>`<div class="nav-item${state.activeTab===it.id?' active':''}" data-tab="${it.id}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${it.d}"/>${it.id==='settings'?'<circle cx="12" cy="12" r="3"/>':''}</svg><span>${it.label}</span>${it.id==='saved'?badge:''}</div>`).join('')}</div>`;
+}
+
+function renderReadingView(){
+  const a=state.selectedArticle;if(!a)return'';
+  const bm=state.bookmarks.some(b=>b.id===a.id);
+
+  // === PAYWALL CHAIN — only shows result, no intermediate states ===
+  let chainHtml='';
+  if(a.pw){
+    // Don't show anything while still loading — eliminates flicker
+    const fetchDone = !state.richLoading;
+    const archiveDone = !state.archiveLoading;
+    
+    if(fetchDone && state.fetchSource==='full'){
+      // Proxy got the full article — paywall bypassed, no need for archives
+      chainHtml=`<div class="paywall-chain found"><div class="pw-title">✅ Full article loaded</div></div>`;
+    } else if(fetchDone && archiveDone){
+      // Both done, show archive results
+      if(state.archive&&state.archive.found){
+        chainHtml=`<div class="paywall-chain found"><div class="pw-title">✅ Archived version available via ${esc(state.archive.method==='wayback'?'Wayback Machine':'Archive')}</div><div class="pw-actions"><button class="pw-action primary" onclick="window.open('${esc(state.archive.url)}','_blank')">Open archived version →</button></div></div>`;
+      } else if(state.archive){
+        chainHtml=`<div class="paywall-chain unavail"><div class="pw-title">🔒 Paywalled — try archive services</div><div class="pw-actions">${(state.archive.options||[]).map(o=>`<button class="pw-action secondary" onclick="window.open('${esc(o.url)}','_blank')">${esc(o.label)} →</button>`).join('')}</div></div>`;
+      }
+    }
+    // If still loading, chainHtml stays empty — no flicker
+  }
+
+  // Archive banner for non-paywall
+  let archBanner='';
+  if(!a.pw&&state.archive){
+    if(state.archive.found) archBanner=`<div class="archive-banner found"><h4>📦 Archived via Wayback Machine</h4><div class="pw-actions" style="margin-top:8px"><button class="pw-action primary" style="background:var(--arch-tx)" onclick="window.open('${esc(state.archive.url)}','_blank')">Open archived version →</button></div></div>`;
+    else archBanner=`<div class="archive-banner missing"><h4>No Wayback snapshot</h4><p>Try:</p><div class="pw-actions" style="margin-top:6px">${(state.archive.options||[]).map(o=>`<button class="pw-action secondary" style="border-color:var(--warn-bor);color:var(--warn)" onclick="window.open('${esc(o.url)}','_blank')">${esc(o.label)} →</button>`).join('')}</div></div>`;
+  }
+
+  // TL;DR
+  let tldr='';
+  if(state.showTldr){
+    if(state.tldrLoading) tldr=`<div class="tldr-box"><div class="tldr-label">Searching & summarising...</div><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.15}s infinite"></div>`).join('')}</div></div>`;
+    else if(state.tldr) tldr=`<div class="tldr-box"><div class="tldr-label">AI Summary</div><div class="tldr-text">${esc(state.tldr)}</div></div>`;
+  }
+
+  // Fetch status badge — skip if paywall chain already shows the status
+  let fetchBadge='';
+  if(!a.pw){
+    if(state.fetchSource==='full') fetchBadge=`<div class="fetch-status success"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Full article loaded</div>`;
+    else if(state.fetchSource==='rss') fetchBadge=`<div class="fetch-status rss"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>Showing RSS preview — full fetch unavailable</div>`;
+  }
+
+  // Body
+  let body='';
+  if(state.richLoading){
+    // Show RSS content IMMEDIATELY — no blocking loading screen
+    const rssHtml=parseRssContent(a.rssHtml || a.content);
+    if(rssHtml){
+      body=rssHtml;
+      body+=`<div style="text-align:center;padding:16px 0;opacity:.5"><div style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--tt)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Loading full article...</div></div>`;
+    } else {
+      const t=stripHtml(a.content||a.excerpt||'');
+      if(t) body+=`<p>${esc(t)}</p>`;
+      body+=`<div class="article-loading"><div class="article-loading-bar"></div><div class="article-loading-text">Fetching full article...</div></div>`;
+    }
+  } else if(state.richContent){
+    body=state.richContent;
+  } else {
+    const rssHtml=parseRssContent(a.rssHtml || a.content);
+    if(rssHtml) body=rssHtml;
+    else{
+      const raw=stripHtml(a.content||a.excerpt||'');
+      const paras=raw.split('\n\n').filter(Boolean);
+      if(paras.length<=1&&raw.length>0){
+        const sentences=raw.match(/[^.!?]+[.!?]+/g)||[raw];
+        const chunks=[];let chunk='';
+        sentences.forEach(s=>{chunk+=s;if(chunk.length>300){chunks.push(chunk.trim());chunk=''}});
+        if(chunk.trim())chunks.push(chunk.trim());
+        body=chunks.map(p=>`<p>${esc(p)}</p>`).join('');
+      } else body=paras.map(p=>`<p>${esc(p)}</p>`).join('');
+    }
+  }
+
+  const related=state.articles.filter(x=>x.id!==a.id&&x.category===a.category).slice(0,3);
+  const relHtml=related.length?`<div class="related-section"><div class="section-label">More in ${esc(a.category)}</div>${related.map(r=>`<div class="related-item" data-article="${r.id}"><div class="related-source">${esc(r.source)}</div><div class="related-title">${esc(r.title)}</div></div>`).join('')}</div>`:'';
+
+  return`<div class="reading-view">
+    <div class="reading-progress" id="reading-progress"></div>
+    <div class="reading-toolbar">
+      <button class="tb-icon" data-action="close-reading"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="tb-icon${bm?' bookmarked':''}" data-action="bookmark"><svg width="18" height="18" viewBox="0 0 24 24" fill="${bm?'currentColor':'none'}" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+        <button class="tb-btn${state.showTldr?' active':''}" data-action="tldr">TL;DR</button>
+        <button class="tb-btn${state.archive?' active':''}" data-action="archive">${state.archiveLoading?'⏳':'📦'} Archive</button>
+        <button class="tb-icon" onclick="window.open('${esc(a.link)}','_blank')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg></button>
+      </div>
+    </div>
+    <div class="reading-scroll" id="reading-scroll">
+      <div class="reading-source">${esc(a.source)} · ${esc(a.category)}</div>
+      <h1 class="reading-title">${esc(a.title)}</h1>
+      ${a.subtitle?`<p style="font-size:15px;color:var(--ts);line-height:1.4;margin:-8px 0 16px">${esc(a.subtitle)}</p>`:''}
+      <div class="reading-byline"><div class="byline-avatar">${esc((a.author||'?')[0])}</div><div><div class="byline-name">${esc(a.author)}</div><div class="byline-date">${esc(a.date)} · ${a.readTime} read</div></div></div>
+      ${chainHtml}${archBanner}${tldr}${fetchBadge}
+      ${a.image&&!bodyHasHeroImage(body,a.image)?`<img class="reading-hero" src="${esc(a.image)}" alt="" loading="lazy" onerror="this.style.display='none'">`:''}
+      <div class="reading-body" id="reading-body">${body}</div>
+      ${a.link&&a.link!=='#'?`<button style="display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--border);border-radius:10px;padding:12px 18px;cursor:pointer;font-size:13px;font-weight:500;color:var(--accent);font-family:'DM Sans',sans-serif;margin-top:4px" onclick="window.open('${esc(a.link)}','_blank')">Read on ${esc(a.source)} →</button>`:''}
+      ${relHtml}
+    </div></div>`;
+}
+
+function renderReviewView(){
+  const r=state.selectedReview;if(!r)return'';
+  const sc=r.score>=8.5?'var(--success)':'var(--warn)';
+  return`<div class="review-view">
+    <div style="position:absolute;top:0;left:0;width:0;height:2px;background:var(--accent);z-index:20" id="review-progress"></div>
+    <div class="reading-toolbar">
+      <button class="tb-icon" data-action="close-review"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+      <span style="font-size:12px;color:var(--tt);font-weight:500">Review Roundup</span>
+      <div style="width:32px"></div>
+    </div>
+    <div class="review-scroll" id="review-scroll">
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--tt);margin-bottom:8px">${esc(r.time)} · ${r.scores.length} critic reviews</div>
+      <h1 class="reading-title" style="margin-bottom:8px">${esc(r.title)}</h1>
+      <p style="font-size:15px;color:var(--ts);margin-bottom:20px;line-height:1.4">${esc(r.subtitle)}</p>
+      <img class="reading-hero" src="${esc(r.image)}" alt="" loading="lazy" onerror="this.style.display='none'">
+      <div class="agg-box" style="background:${sc}08;border:1px solid ${sc}20">
+        <div class="agg-score" style="background:${sc}15;color:${sc}">${r.score}</div>
+        <div><div style="font-size:15px;font-weight:600;color:var(--text)">Aggregate Score</div><div style="font-size:12px;color:var(--tt);margin-top:2px">${(r.scores.reduce((a,s)=>a+s.s,0)/r.scores.length).toFixed(1)} avg from ${r.scores.length} reviews</div></div>
+      </div>
+      <p style="font-family:'Source Serif 4',Georgia,serif;font-size:17px;line-height:1.75;color:var(--text);margin:0 0 24px">${esc(r.summary)}</p>
+      ${r.verdict?`<div class="verdict-box"><div class="verdict-label">Bottom Line</div><div style="font-size:14px;line-height:1.6;color:var(--text)">${esc(r.verdict)}</div></div>`:''}
+      ${r.pros&&r.cons?`<div class="pros-cons"><div class="pros-col"><h4>Pros</h4><ul>${r.pros.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div><div class="cons-col"><h4>Cons</h4><ul>${r.cons.map(c=>`<li>${esc(c)}</li>`).join('')}</ul></div></div>`:''}
+      <div class="section-label" style="margin-top:28px">What Critics Say</div>
+      ${r.scores.map(s=>`<div class="critic-card">
+        <div class="critic-top"><span class="critic-pub">${esc(s.pub)}</span><div class="critic-score" style="background:${sc}15;border:1px solid ${sc}25;color:${sc}">${s.s}</div></div>
+        <p class="critic-verdict">${esc(s.v)}</p>
+        ${s.url?`<button class="critic-link-btn" data-critic-url="${esc(s.url)}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>Read full review</button>`:''}
+      </div>`).join('')}
+      <div class="section-label" style="margin-top:28px">Key Specs</div>
+      ${r.specs.map(s=>`<div class="spec-row"><div class="spec-top"><span class="spec-label">${esc(s.l)}</span><span class="spec-value">${esc(s.v)}</span></div><div class="spec-detail">${esc(s.d)}</div></div>`).join('')}
+    </div></div>`;
+}
+
+function renderSearch(){
+  return`<div class="search-overlay"><div class="search-bar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--tt)" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><input id="search-input" type="text" placeholder="Search articles, reviews, topics..." autofocus><button class="search-cancel" data-action="close-search">Cancel</button></div><div class="search-results" id="search-results"></div></div>`;
+}
+
+// ============================================================
+// EVENTS
+// ============================================================
+function bindEvents(){
+  document.querySelectorAll('[data-tab]').forEach(el=>{el.addEventListener('click',()=>{state.activeTab=el.dataset.tab;render()})});
+  document.querySelectorAll('[data-cat]').forEach(el=>{el.addEventListener('click',()=>{state.activeCat=el.dataset.cat;render()})});
+  document.querySelectorAll('[data-article]').forEach(el=>{el.addEventListener('click',()=>{
+    const a=[...state.articles,...state.bookmarks].find(x=>x.id===el.dataset.article);
+    if(a)openArticle(a);
+  })});
+  document.querySelectorAll('[data-review]').forEach(el=>{el.addEventListener('click',()=>{state.selectedReview=REVIEWS.find(r=>r.id===el.dataset.review);render()})});
+  document.querySelectorAll('[data-reviewcat]').forEach(el=>{el.addEventListener('click',()=>{activeReviewCat=el.dataset.reviewcat;render()})});
+
+  // Critic review links — open in-app reader view
+  document.querySelectorAll('[data-critic-url]').forEach(el=>{
+    el.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      const url=el.dataset.criticUrl;
+      if(url) openArticleFromUrl(url);
+    });
+  });
+
+  document.querySelectorAll('[data-delete-source]').forEach(el=>{el.addEventListener('click',(e)=>{e.stopPropagation();state.sources=state.sources.filter(s=>s.id!==el.dataset.deleteSource);saveSources();render()})});
+
+  document.querySelectorAll('[data-action]').forEach(el=>{
+    el.addEventListener('click',async(e)=>{
+      e.stopPropagation();
+      const act=el.dataset.action;
+      if(act==='dark'){state.darkMode=!state.darkMode;saveDark();render()}
+      else if(act==='search'){state.showSearch=true;render();setTimeout(()=>$('#search-input')?.focus(),50)}
+      else if(act==='close-search'){state.showSearch=false;render()}
+      else if(act==='close-reading'){state.selectedArticle=null;state.richContent=null;state.richImages=[];state.fetchSource=null;render()}
+      else if(act==='close-review'){state.selectedReview=null;render()}
+      else if(act==='digest'){
+        state.digestOpen=!state.digestOpen;
+        if(state.digestOpen&&!state.digestText){state.digestLoading=true;render();const ai=await fetchDigest(state.articles);state.digestText=ai||genLocalDigest(state.articles);state.digestLoading=false}
+        render();
+      }
+      else if(act==='bookmark'&&state.selectedArticle)toggleBookmark(state.selectedArticle);
+      else if(act==='tldr'&&state.selectedArticle){
+        if(state.showTldr){state.showTldr=false;render();return}
+        state.showTldr=true;trackEngagement(state.selectedArticle,'tldr');
+        if(!state.tldr){state.tldrLoading=true;render();const r=await fetchTldr(state.selectedArticle.title,state.selectedArticle.source);state.tldr=r||state.selectedArticle.excerpt;state.tldrLoading=false}
+        render();
+      }
+      else if(act==='archive'&&state.selectedArticle){
+        if(state.archive||!state.selectedArticle.link)return;
+        state.archiveLoading=true;render();
+        state.archive=await runArchiveChain(state.selectedArticle.link);
+        state.archiveLoading=false;render();
+      }
+      else if(act==='show-add-source'){state.showAddSource=true;render()}
+      else if(act==='cancel-add-source'){state.showAddSource=false;render()}
+      else if(act==='save-add-source')addCustomSource();
+      else if(act==='reset-engagement'){state.engagement={};localStorage.removeItem('reader-engagement');render()}
+      else if(act==='go-feed'){state.activeTab='feed';render()}
+    });
+  });
+
+  document.querySelectorAll('[data-source]').forEach(el=>{
+    el.addEventListener('click',()=>{const s=state.sources.find(x=>x.id===el.dataset.source);if(s){s.on=!s.on;saveSources();render()}});
+  });
+
+  document.querySelectorAll('[data-remove]').forEach(el=>{el.addEventListener('click',(e)=>{e.stopPropagation();state.bookmarks=state.bookmarks.filter(b=>b.id!==el.dataset.remove);saveBookmarks();render()})});
+
+  // Source search/discovery
+  const srcSearch = document.getElementById('source-search');
+  if (srcSearch) {
+    const KNOWN_FEEDS = [
+      {n:'TechRadar',f:'https://www.techradar.com/rss',c:'Tech',d:'techradar.com'},{n:'Tom\'s Guide',f:'https://www.tomsguide.com/feeds/all',c:'Tech',d:'tomsguide.com'},
+      {n:'Mashable',f:'https://mashable.com/feeds/rss/all',c:'Tech',d:'mashable.com'},{n:'The Register',f:'https://www.theregister.com/headlines.atom',c:'Tech',d:'theregister.com'},
+      {n:'Hacker News',f:'https://hnrss.org/frontpage',c:'Tech',d:'news.ycombinator.com'},{n:'MIT Tech Review',f:'https://www.technologyreview.com/feed/',c:'Tech',d:'technologyreview.com'},
+      {n:'EFTM',f:'https://eftm.com/feed',c:'Tech',d:'eftm.com'},{n:'Gizmodo',f:'https://gizmodo.com/rss',c:'Tech',d:'gizmodo.com'},
+      {n:'RTINGS',f:'https://www.rtings.com/rss/news',c:'Tech',d:'rtings.com'},{n:'Android Authority',f:'https://www.androidauthority.com/feed/',c:'Tech',d:'androidauthority.com'},
+      {n:'NYT World',f:'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',c:'World',d:'nytimes.com',pw:true},{n:'Washington Post',f:'https://feeds.washingtonpost.com/rss/world',c:'World',d:'washingtonpost.com',pw:true},
+      {n:'The Guardian UK',f:'https://www.theguardian.com/uk/rss',c:'World',d:'theguardian.com'},{n:'Al Jazeera',f:'https://www.aljazeera.com/xml/rss/all.xml',c:'World',d:'aljazeera.com'},
+      {n:'Sky News AU',f:'https://www.skynews.com.au/feeds/rss/',c:'Australia',d:'skynews.com.au'},{n:'news.com.au',f:'https://www.news.com.au/content-feeds/latest-news-national/',c:'Australia',d:'news.com.au'},
+      {n:'Sydney Morning Herald',f:'https://www.smh.com.au/rss/feed.xml',c:'Australia',d:'smh.com.au',pw:true},
+      {n:'Imaging Resource',f:'https://www.imaging-resource.com/feed/',c:'Photo',d:'imaging-resource.com'},{n:'SonyAlpha Rumors',f:'https://www.sonyalpharumors.com/feed/',c:'Photo',d:'sonyalpharumors.com'},
+      {n:'Jalopnik',f:'https://jalopnik.com/rss',c:'Auto',d:'jalopnik.com'},{n:'Motor Trend',f:'https://www.motortrend.com/feed/',c:'Auto',d:'motortrend.com'},
+      {n:'ESPN FC',f:'https://www.espn.com/espn/rss/soccer/news',c:'Sport',d:'espn.com'},{n:'Bleacher Report',f:'https://bleacherreport.com/articles/feed',c:'Sport',d:'bleacherreport.com'},
+      {n:'Formula 1',f:'https://www.formula1.com/content/fom-website/en/latest/all.xml',c:'Sport',d:'formula1.com'},
+      {n:'IGN',f:'https://feeds.feedburner.com/ign/all',c:'Tech',d:'ign.com'},{n:'Kotaku',f:'https://kotaku.com/rss',c:'Tech',d:'kotaku.com'},
+      {n:'The Economist',f:'https://www.economist.com/rss',c:'World',d:'economist.com',pw:true},{n:'Financial Times',f:'https://www.ft.com/rss/home',c:'World',d:'ft.com',pw:true},
+    ];
+    const existingDomains = new Set(state.sources.map(s=>s.domain));
+    srcSearch.addEventListener('input', () => {
+      const q = srcSearch.value.toLowerCase().trim();
+      const res = document.getElementById('source-search-results');
+      if (!res || q.length < 2) { if(res) res.innerHTML = ''; return; }
+      const matches = KNOWN_FEEDS.filter(f => f.n.toLowerCase().includes(q) || f.d.includes(q) || f.c.toLowerCase().includes(q));
+      // Also offer Google News RSS for the search term
+      const googleOpt = q.length >= 3 ? `<div class="source-search-item" data-add-gn="${esc(q)}" style="cursor:pointer;padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:600;font-size:13px;color:var(--text)">Google News: "${esc(q)}"</div><div style="font-size:11px;color:var(--tt)">Auto-generated RSS from Google News</div></div><button class="btn btn-primary" style="padding:4px 10px;font-size:11px;flex-shrink:0">+ Add</button></div>` : '';
+      res.innerHTML = matches.filter(f=>!existingDomains.has(f.d)).map(f=>`<div class="source-search-item" data-add-known="${f.d}" style="cursor:pointer;padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:600;font-size:13px;color:var(--text)">${esc(f.n)}</div><div style="font-size:11px;color:var(--tt)">${esc(f.c)} · ${esc(f.d)}${f.pw?' · 🔒':''}</div></div><button class="btn btn-primary" style="padding:4px 10px;font-size:11px;flex-shrink:0">+ Add</button></div>`).join('') + googleOpt;
+      if (!matches.length && !googleOpt) res.innerHTML = `<div style="padding:12px 0;font-size:12px;color:var(--tt)">No sources found for "${esc(q)}"</div>`;
+      // Bind add buttons
+      res.querySelectorAll('[data-add-known]').forEach(el => {
+        el.addEventListener('click', () => {
+          const f = KNOWN_FEEDS.find(x => x.d === el.dataset.addKnown);
+          if (f) { state.sources.push({id:'sc'+Date.now(),name:f.n,cat:f.c,feed:f.f,on:true,pw:f.pw||false,domain:f.d,custom:true}); saveSources(); render(); }
+        });
+      });
+      res.querySelectorAll('[data-add-gn]').forEach(el => {
+        el.addEventListener('click', () => {
+          const term = el.dataset.addGn;
+          state.sources.push({id:'sg'+Date.now(),name:term,cat:'Custom',feed:`https://news.google.com/rss/search?q=${encodeURIComponent(term)}&hl=en-AU&gl=AU&ceid=AU:en`,on:true,pw:false,domain:'news.google.com',custom:true});
+          saveSources(); render();
+        });
+      });
+    });
+  }
+
+  // Search
+  const si=$('#search-input');
+  if(si){si.addEventListener('input',()=>{
+    const q=si.value.toLowerCase();const res=$('#search-results');
+    if(q.length<2){res.innerHTML='';return}
+    const all=[...state.articles,...REVIEWS.map(r=>({id:r.id,title:r.title,source:'Review',category:'Reviews',isReview:true}))];
+    const m=all.filter(a=>a.title.toLowerCase().includes(q)||a.source?.toLowerCase().includes(q)||a.category?.toLowerCase().includes(q));
+    if(!m.length){res.innerHTML=`<div class="search-empty">No results for "${esc(q)}"</div>`;return}
+    res.innerHTML=m.map(a=>`<div class="related-item" data-${a.isReview?'review':'article'}="${a.id}"><div class="related-source">${esc(a.source)} · ${esc(a.category)}</div><div class="related-title">${esc(a.title)}</div></div>`).join('');
+    res.querySelectorAll('[data-article]').forEach(el=>{el.addEventListener('click',()=>{const a=state.articles.find(x=>x.id===el.dataset.article);if(a){state.showSearch=false;openArticle(a)}})});
+    res.querySelectorAll('[data-review]').forEach(el=>{el.addEventListener('click',()=>{state.selectedReview=REVIEWS.find(r=>r.id===el.dataset.review);state.showSearch=false;render()})});
+  })}
+
+  // Scroll progress
+  const rs=$('#reading-scroll'),rp=$('#reading-progress');
+  if(rs&&rp){rs.addEventListener('scroll',()=>{const m=rs.scrollHeight-rs.clientHeight;rp.style.width=m>0?`${(rs.scrollTop/m)*100}%`:'0'})}
+  const vs=$('#review-scroll'),vp=$('#review-progress');
+  if(vs&&vp){vs.addEventListener('scroll',()=>{const m=vs.scrollHeight-vs.clientHeight;vp.style.width=m>0?`${(vs.scrollTop/m)*100}%`:'0'})}
+
+  bindInAppLinks();
+  // Clean up decorative images (quote marks etc) after they load
+  const readingBody = document.querySelector('.reading-body');
+  if (readingBody) setTimeout(() => cleanupLoadedImages(readingBody), 100);
+  // Init gallery scroll indicators
+  document.querySelectorAll('.img-gallery').forEach(gallery => {
+    const track = gallery.querySelector('.img-gallery-track');
+    const dots = gallery.querySelectorAll('.gallery-dot');
+    if (!track || !dots.length) return;
+    track.addEventListener('scroll', () => {
+      const scrollLeft = track.scrollLeft;
+      const itemWidth = track.firstElementChild?.offsetWidth || 1;
+      const gap = 8;
+      const idx = Math.round(scrollLeft / (itemWidth + gap));
+      dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+    });
+  });
+}
+
+// ============================================================
+// ADD CUSTOM SOURCE
+// ============================================================
+function addCustomSource(){
+  const name=$('#add-name')?.value.trim();
+  const feed=$('#add-feed')?.value.trim();
+  const cat=$('#add-cat')?.value||'Custom';
+  const pw=$('#add-paywall')?.value==='yes';
+  if(!name||!feed)return;
+  let domain='';try{domain=new URL(feed).hostname.replace('www.','')}catch{}
+  if(cat==='Custom'&&!CATEGORIES.includes('Custom'))CATEGORIES.splice(CATEGORIES.length-1,0,'Custom');
+  state.sources.push({id:'c-'+Date.now(),name,cat,feed,on:true,pw,domain,custom:true});
+  saveSources();state.showAddSource=false;render();
+  fetchRSS().then(a=>{state.articles=a;render()});
+}
+
+// ============================================================
+// IN-APP LINKS
+// ============================================================
+function bindInAppLinks(){
+  const body=$('#reading-body');if(!body)return;
+  const currentArticle = state.selectedArticle;
+  const currentDomain = currentArticle?.sourceDomain || '';
+  body.querySelectorAll('a[href]').forEach(a=>{
+    const href=a.getAttribute('href');
+    if(!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('javascript:')) return;
+    // Open in-app if: link is to a known source domain, OR same domain as current article
+    const linkDomain = getDomain(href);
+    const isInternal = (currentDomain && linkDomain.includes(currentDomain)) || isKnownDomain(href);
+    if(isInternal){
+      a.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();openArticleFromUrl(href)});
+      a.style.textDecoration='underline';
+      a.style.textDecorationColor='var(--accent)';
+      a.title='Opens in Reader';
+    } else {
+      // External links open in new tab
+      a.setAttribute('target','_blank');
+      a.setAttribute('rel','noopener');
+    }
+  });
+}
+
+// ============================================================
+// OPEN ARTICLE — two-tier fetch
+// ============================================================
+function openArticle(article){
+  state.selectedArticle=article;
+  state.selectedReview=null;
+  state.tldr=null;state.showTldr=false;
+  state.archive=null;state.archiveLoading=false;state.archiveStep=0;
+  state.richContent=null;state.richImages=[];state.fetchSource=null;
+  trackEngagement(article,'click');
+
+  if(article.link&&article.link!=='#'){
+    // Set loading state and render ONCE
+    state.richLoading=true;
+    if(article.pw) state.archiveLoading=true;
+    renderNow();
+
+    // Fetch full article
+    fetchFullArticle(article.link).then(result=>{
+      state.richLoading=false;
+      if(result){
+        const fetchedLen = stripHtml(result.html).length;
+        const rssLen = stripHtml(article.rssHtml||article.content||'').length;
+        // For paywalled sources, require substantially more content (not just a few extra chars)
+        const minLen = article.pw ? Math.max(rssLen * 1.5, 800) : rssLen;
+        if (fetchedLen > minLen) {
+        let html = result.html;
+        if (article.image) html = stripDuplicateHeroFromContent(html, article.image);
+        state.richContent=html;
+        state.richImages=result.images||[];
+        state.fetchSource='full';
+        if(article.title==='Loading article...'&&result.title)article.title=result.title;
+        if(!article.image&&result.ogImage)article.image=result.ogImage;
+        if(result.subtitle&&!article.subtitle)article.subtitle=result.subtitle;
+        if(result.author&&(!article.author||article.author===article.source))article.author=result.author;
+      } else {
+        const rss=parseRssContent(article.rssHtml||article.content);
+        if(rss) state.fetchSource='rss';
+      }
+      } // end if(result)
+      
+      // If no rich content was loaded, mark as RSS fallback
+      if (!state.richContent) {
+        state.fetchSource = 'rss';
+      }
+      
+      // In-place content swap (no full re-render = no jitter)
+      const bodyEl = document.getElementById('reading-body');
+      if (bodyEl && state.selectedArticle === article) {
+        if (state.richContent) {
+          bodyEl.innerHTML = state.richContent;
+        }
+        cleanupLoadedImages(bodyEl);
+        bindInAppLinks();
+        // Remove ALL loading indicators
+        bodyEl.querySelectorAll('[style*="spin"]').forEach(el => {
+          const wrapper = el.closest('div');
+          if (wrapper) wrapper.remove();
+        });
+        bodyEl.querySelectorAll('.article-loading').forEach(el => el.remove());
+        // Update fetch badge
+        const header = bodyEl.parentElement;
+        if (header) {
+          const oldBadge = header.querySelector('.fetch-status');
+          if (oldBadge) oldBadge.remove();
+          if (state.fetchSource === 'rss') {
+            const badge = document.createElement('div');
+            badge.className = 'fetch-status rss';
+            badge.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>Showing RSS preview';
+            bodyEl.parentElement.insertBefore(badge, bodyEl);
+          }
+        }
+        // Init galleries
+        document.querySelectorAll('.img-gallery').forEach(gallery => {
+          const track = gallery.querySelector('.img-gallery-track');
+          const dots = gallery.querySelectorAll('.gallery-dot');
+          if (!track || !dots.length) return;
+          track.addEventListener('scroll', () => {
+            const idx = Math.round(track.scrollLeft / ((track.firstElementChild?.offsetWidth || 1) + 8));
+            dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+          });
+        });
+      } else {
+        render();
+      }
+    }).catch(() => {
+      // Ensure loading state clears on any error
+      state.richLoading = false;
+      const bodyEl = document.getElementById('reading-body');
+      if (bodyEl) {
+        const spinner = bodyEl.querySelector('[style*="spin"]');
+        if (spinner) spinner.closest('div').remove();
+      }
+    });
+
+    // Archive chain for paywalled — runs quietly, renders only at end
+    if(article.pw){
+      runArchiveChain(article.link).then(r=>{state.archive=r;state.archiveLoading=false;render()});
+    }
+  } else {
+    renderNow();
+  }
+}
+
+async function openArticleFromUrl(url){
+  const domain=getDomain(url);
+  const src=state.sources.find(s=>domain.includes(s.domain));
+  const temp={
+    id:'t-'+Date.now(),title:'Loading article...',excerpt:'',content:'',rssHtml:'',
+    author:src?.name||domain,date:fmtDate(new Date().toISOString()),rawDate:new Date().toISOString(),
+    time:'Now',source:src?.name||domain,sourceDomain:domain,category:src?.cat||'Tech',
+    link:url,image:null,readTime:'...',topics:[],pw:src?.pw||false,
+  };
+  state.selectedArticle=temp;
+  state.selectedReview=null; // IMPORTANT: close review view
+  state.tldr=null;state.showTldr=false;
+  state.archive=null;state.archiveLoading=false;
+  state.richContent=null;state.richImages=[];state.richLoading=true;state.fetchSource=null;
+  render();
+
+  const result=await fetchFullArticle(url);
+  state.richLoading=false;
+  if(result){
+    let html = result.html;
+    if(result.ogImage) { temp.image=result.ogImage; html = stripDuplicateHeroFromContent(html, result.ogImage); }
+    state.richContent=html;state.richImages=result.images||[];state.fetchSource='full';
+    if(result.title)temp.title=result.title;
+    if(result.subtitle)temp.subtitle=result.subtitle;
+    if(result.author)temp.author=result.author;
+    temp.excerpt=stripHtml(result.html).slice(0,300);
+    temp.readTime=readTime(result.html);
+  }
+  render();
+  setTimeout(()=>bindInAppLinks(),50);
+}
+
+function genLocalDigest(articles){
+  const h=new Date().getHours();const cycle=h<12?'morning':'evening';
+  const cats={};articles.slice(0,6).forEach(a=>{if(!cats[a.category])cats[a.category]=[];cats[a.category].push(a)});
+  return`Here's what's happening this ${cycle}. ${Object.entries(cats).map(([c,arts])=>`In ${c.toLowerCase()}: ${arts.map(a=>a.title.split(' ').slice(0,10).join(' ')).join('; ')}.`).join(' ')}`;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init(){
+  // Sync body background with theme immediately
+  document.body.classList.toggle('dark-bg', state.darkMode);
+  // CRITICAL: Merge new default sources into existing sources
+  // This ensures sources added in new versions appear for existing users
+  const defaults = defaultSources();
+  const existingIds = new Set(state.sources.map(s => s.id));
+  for (const def of defaults) {
+    if (!existingIds.has(def.id)) {
+      state.sources.push(def);
+    }
+  }
+  // Migrate field names from older versions
+  state.sources = state.sources.map(s => ({
+    ...s,
+    custom: s.custom ?? false,
+    pw: s.pw ?? s.paywalled ?? false,
+  }));
+  // Update feed URLs if they changed between versions
+  const feedMap = {};
+  defaults.forEach(d => { feedMap[d.id] = d.feed; });
+  state.sources.forEach(s => {
+    if (feedMap[s.id] && feedMap[s.id] !== s.feed && !s.custom) {
+      s.feed = feedMap[s.id];
+    }
+  });
+  saveSources();
+  renderNow();
+  fetchWeather(); // Start weather fetch (non-blocking)
+  try{state.articles=await fetchRSS()}catch(e){console.warn('RSS:',e)}
+  state.loading=false;render();
+  // Fetch reviews AFTER feed loads (non-blocking, lower priority)
+  if (REVIEWS.length === 0 || Date.now() - REVIEWS_TS > REVIEWS_TTL) {
+    setTimeout(() => fetchDynamicReviews(), 500);
+  }
+}
+init();
+</script>
+</body>
+</html>
