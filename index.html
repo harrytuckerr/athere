@@ -483,7 +483,7 @@ function defaultSources() {
 
 const CATEGORIES = ['For You','Tech','Australia','Sport','Photo','World','Auto','Reviews'];
 const API_BASE = 'https://athere-worker.harrytuckerr.workers.dev';
-const APP_VERSION = 'V27';
+const APP_VERSION = 'V28';
 
 // Post-render: hide decorative images (quote marks, ornaments) based on loaded dimensions
 function cleanupLoadedImages(container) {
@@ -541,6 +541,18 @@ function cleanDom(doc) {
   doc.querySelectorAll(AUTHOR_SELECTORS).forEach(e => e.remove());
   doc.querySelectorAll(SOCIAL_SELECTORS).forEach(e => e.remove());
   doc.querySelectorAll(PROMO_SELECTORS).forEach(e => e.remove());
+  // Remove ALL buttons and input/form elements (never editorial content)
+  doc.querySelectorAll('button, input, select, textarea, form').forEach(e => e.remove());
+  // Remove The Age / SMH / Nine site chrome junk
+  doc.querySelectorAll('p, div, span').forEach(el => {
+    const t = el.textContent.trim();
+    if (/^(Save|Share|Got it|Print|Close|A\s*A\s*A)$/i.test(t)) el.remove();
+    else if (/You have reached your maximum/i.test(t)) el.remove();
+    else if (/Remove items from your saved list/i.test(t)) el.remove();
+    else if (/Save this article for later/i.test(t)) el.remove();
+    else if (/Add articles to your saved list/i.test(t)) el.remove();
+    else if (/^Updated\s+\w+\s+\d+.*first published/i.test(t) && t.length < 150) el.remove();
+  });
   // Related sections — only remove if short/promo-like
   doc.querySelectorAll(RELATED_SELECTORS).forEach(e => {
     if (e.querySelector('img') || e.querySelectorAll('a').length > 1 || e.textContent.trim().length < 300) e.remove();
@@ -582,6 +594,10 @@ function shouldSkipText(text) {
   // SBS/news metadata
   if (/^(For the latest from|Download our app|Source:|Published \d|Updated \d|\d+ min(?:ute)? read$)/i.test(t) && t.length < 200) return true;
   if (/download our app|subscribe to our newsletter|get the latest news/i.test(t) && t.length < 200) return true;
+  // The Age/SMH site chrome text
+  if (/^(Save|Share|Got it|Print|Close|A\s*A\s*A)$/i.test(t)) return true;
+  if (/You have reached your maximum|Remove items from your saved list|Save this article for later|Add articles to your saved list/i.test(t) && t.length < 200) return true;
+  if (/^Updated\s+\w+\s+\d+.*first published/i.test(t) && t.length < 150) return true;
   // Author credentials
   if (/^(Senior .* writer|Author of|Graduate of|Staff writer|Correspondent|Editor|Reporter|Follow @)/i.test(t) && t.length < 100) return true;
   return false;
@@ -976,6 +992,10 @@ async function fetchReviews() {
 // ============================================================
 function parseRssContent(htmlStr) {
   if (!htmlStr || htmlStr.length < 50) return null;
+  // Safety net: decode XML entities that might still be encoded from older cached content
+  if (htmlStr.includes('&lt;') && htmlStr.includes('&gt;')) {
+    htmlStr = htmlStr.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+  }
   const div = document.createElement('div');
   div.innerHTML = htmlStr;
   
@@ -1428,22 +1448,32 @@ function renderReadingView(){
   // === PAYWALL CHAIN — only shows result, no intermediate states ===
   let chainHtml='';
   if(a.pw){
-    // Don't show anything while still loading — eliminates flicker
     const fetchDone = !state.richLoading;
     const archiveDone = !state.archiveLoading;
+    const hasContent = state.richContent || state.fetchSource === 'rss';
     
     if(fetchDone && state.fetchSource==='full'){
-      // Proxy got the full article — paywall bypassed, no need for archives
-      chainHtml=`<div class="paywall-chain found"><div class="pw-title">✅ Full article loaded</div></div>`;
+      // Backend bypassed the paywall — show what method was used
+      const methodName = state.archive?.method ? ({
+        'wayback': 'Wayback Machine', 'google-cache': 'Google Cache', 'archive-today': 'Archive.today',
+        'fb-bot': 'content preview', 'tw-bot': 'content preview', 'bing-bot': 'content preview',
+        'googlebot': 'search indexer', 'google-referer': 'search referral', 'amp': 'AMP version',
+      })[state.archive.method] || 'bypass' : null;
+      chainHtml=`<div class="paywall-chain found"><div class="pw-title">✅ ${methodName ? 'Loaded via ' + methodName : 'Full article loaded'}</div></div>`;
     } else if(fetchDone && archiveDone){
-      // Both done, show archive results
       if(state.archive&&state.archive.found){
-        chainHtml=`<div class="paywall-chain found"><div class="pw-title">✅ Archived version available via ${esc(state.archive.method==='wayback'?'Wayback Machine':'Archive')}</div><div class="pw-actions"><button class="pw-action primary" onclick="window.open('${esc(state.archive.url)}','_blank')">Open archived version →</button></div></div>`;
+        if(hasContent){
+          // Content loaded AND archive available — compact info, no giant link-out
+          const archLabel = state.archive.method==='wayback'?'Wayback Machine':'Archive';
+          chainHtml=`<div class="paywall-chain found"><div class="pw-title">✅ Content loaded · <a href="${esc(state.archive.url)}" target="_blank" style="color:inherit;text-decoration:underline;text-underline-offset:2px">${archLabel} available</a></div></div>`;
+        } else {
+          // No content but archive exists — show prominent link-out
+          chainHtml=`<div class="paywall-chain found"><div class="pw-title">✅ Archived version available via ${esc(state.archive.method==='wayback'?'Wayback Machine':'Archive')}</div><div class="pw-actions"><button class="pw-action primary" onclick="window.open('${esc(state.archive.url)}','_blank')">Open archived version →</button></div></div>`;
+        }
       } else if(state.archive){
         chainHtml=`<div class="paywall-chain unavail"><div class="pw-title">🔒 Paywalled — try archive services</div><div class="pw-actions">${(state.archive.options||[]).map(o=>`<button class="pw-action secondary" onclick="window.open('${esc(o.url)}','_blank')">${esc(o.label)} →</button>`).join('')}</div></div>`;
       }
     }
-    // If still loading, chainHtml stays empty — no flicker
   }
 
   // Archive banner for non-paywall
@@ -1832,6 +1862,10 @@ function openArticle(article){
         // Backend already did paywall bypass — trust the result unless it's tiny
         if (fetchedLen > 100) {
         let html = result.html;
+        // Safety net: decode XML entities that might be in older cached content
+        if (html.includes('&lt;') && html.includes('&gt;')) {
+          html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+        }
         if (article.image) html = stripDuplicateHeroFromContent(html, article.image);
         state.richContent=html;
         state.richImages=result.images||[];
@@ -1861,6 +1895,8 @@ function openArticle(article){
       if (bodyEl && state.selectedArticle === article) {
         if (state.richContent) {
           bodyEl.innerHTML = state.richContent;
+          // Safety net: clean site chrome that backend may have missed
+          cleanDom(bodyEl);
         }
         cleanupLoadedImages(bodyEl);
         bindInAppLinks();
