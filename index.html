@@ -483,7 +483,7 @@ function defaultSources() {
 
 const CATEGORIES = ['For You','Tech','Australia','Sport','Photo','World','Auto','Reviews'];
 const API_BASE = 'https://athere-worker.harrytuckerr.workers.dev';
-const APP_VERSION = 'V25';
+const APP_VERSION = 'V26';
 
 // Post-render: hide decorative images (quote marks, ornaments) based on loaded dimensions
 function cleanupLoadedImages(container) {
@@ -1003,23 +1003,27 @@ function parseRssContent(htmlStr) {
   return result.html.length > 100 ? postProcessHtml(result.html) : null;
 }
 
-async function fetchFullArticle(url) {
-  try {
-    const res = await fetch(`${API_BASE}/api/article?url=${encodeURIComponent(url)}`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data.error) return null;
-    return {
-      title: data.title || null,
-      html: data.html || '',
-      ogImage: data.image || null,
-      images: [],
-      author: data.author || null,
-      subtitle: null,
-      method: data.method,
-      archiveUrl: data.archiveUrl || null,
-    };
-  } catch { return null; }
+async function fetchFullArticle(idOrUrl) {
+  // Try by article ID first (pre-cached content from backend)
+  if (idOrUrl && !idOrUrl.startsWith('http')) {
+    try {
+      const res = await fetch(`${API_BASE}/api/article?id=${encodeURIComponent(idOrUrl)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (!data.error) return {
+          title: data.title || null,
+          html: data.html || '',
+          ogImage: data.image || null,
+          images: [],
+          author: data.author || null,
+          subtitle: null,
+          method: data.method,
+          archiveUrl: data.archiveUrl || null,
+        };
+      }
+    } catch {}
+  }
+  return null;
 }
 
 
@@ -1820,8 +1824,8 @@ function openArticle(article){
     if(article.pw) state.archiveLoading=true;
     renderNow();
 
-    // Fetch full article
-    fetchFullArticle(article.link).then(result=>{
+    // Fetch full article — pre-cached in backend, should be instant
+    fetchFullArticle(article.id).then(result=>{
       state.richLoading=false;
       if(result){
         const fetchedLen = stripHtml(result.html).length;
@@ -1908,35 +1912,14 @@ function openArticle(article){
 }
 
 async function openArticleFromUrl(url){
-  const domain=getDomain(url);
-  const src=state.sources.find(s=>domain.includes(s.domain));
-  const temp={
-    id:'t-'+Date.now(),title:'Loading article...',excerpt:'',content:'',rssHtml:'',
-    author:src?.name||domain,date:fmtDate(new Date().toISOString()),rawDate:new Date().toISOString(),
-    time:'Now',source:src?.name||domain,sourceDomain:domain,category:src?.cat||'Tech',
-    link:url,image:null,readTime:'...',topics:[],pw:src?.pw||false,
-  };
-  state.selectedArticle=temp;
-   // IMPORTANT: close review view
-  state.tldr=null;state.showTldr=false;
-  state.archive=null;state.archiveLoading=false;
-  state.richContent=null;state.richImages=[];state.richLoading=true;state.fetchSource=null;
-  render();
-
-  const result=await fetchFullArticle(url);
-  state.richLoading=false;
-  if(result){
-    let html = result.html;
-    if(result.ogImage) { temp.image=result.ogImage; html = stripDuplicateHeroFromContent(html, result.ogImage); }
-    state.richContent=html;state.richImages=result.images||[];state.fetchSource='full';
-    if(result.title)temp.title=result.title;
-    if(result.subtitle)temp.subtitle=result.subtitle;
-    if(result.author)temp.author=result.author;
-    temp.excerpt=stripHtml(result.html).slice(0,300);
-    temp.readTime=readTime(result.html);
+  // Check if this URL matches a cached article
+  const cached = state.articles.find(a => a.link === url);
+  if (cached) {
+    openArticle(cached);
+    return;
   }
-  render();
-  setTimeout(()=>bindInAppLinks(),50);
+  // External link (e.g. review article) — open in browser
+  window.open(url, '_blank');
 }
 
 function genLocalDigest(articles){
