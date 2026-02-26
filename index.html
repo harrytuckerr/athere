@@ -483,7 +483,7 @@ function defaultSources() {
 
 const CATEGORIES = ['For You','Tech','Australia','Sport','Photo','World','Auto','Reviews'];
 const API_BASE = 'https://athere-worker.harrytuckerr.workers.dev';
-const APP_VERSION = 'V28';
+const APP_VERSION = 'V29';
 
 // Post-render: hide decorative images (quote marks, ornaments) based on loaded dimensions
 function cleanupLoadedImages(container) {
@@ -1511,7 +1511,7 @@ function renderReadingView(){
       body+=`<div class="article-loading"><div class="article-loading-bar"></div><div class="article-loading-text">Fetching full article...</div></div>`;
     }
   } else if(state.richContent){
-    body=state.richContent;
+    body=state.richContent.replace(/<!DOCTYPE[^>]*>/gi,'').replace(/<\/?html[^>]*>/gi,'').replace(/<head[\s\S]*?<\/head>/gi,'').replace(/<\/?body[^>]*>/gi,'');
   } else {
     const rssHtml=parseRssContent(a.rssHtml || a.content);
     if(rssHtml) body=rssHtml;
@@ -1862,10 +1862,6 @@ function openArticle(article){
         // Backend already did paywall bypass — trust the result unless it's tiny
         if (fetchedLen > 100) {
         let html = result.html;
-        // Safety net: decode XML entities that might be in older cached content
-        if (html.includes('&lt;') && html.includes('&gt;')) {
-          html = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"');
-        }
         if (article.image) html = stripDuplicateHeroFromContent(html, article.image);
         state.richContent=html;
         state.richImages=result.images||[];
@@ -1894,9 +1890,13 @@ function openArticle(article){
       const bodyEl = document.getElementById('reading-body');
       if (bodyEl && state.selectedArticle === article) {
         if (state.richContent) {
-          bodyEl.innerHTML = state.richContent;
-          // Safety net: clean site chrome that backend may have missed
-          cleanDom(bodyEl);
+          let safeHtml = state.richContent;
+          // Safety: strip any full-document wrappers that would break container
+          safeHtml = safeHtml.replace(/<!DOCTYPE[^>]*>/gi, '');
+          safeHtml = safeHtml.replace(/<\/?html[^>]*>/gi, '');
+          safeHtml = safeHtml.replace(/<head[\s\S]*?<\/head>/gi, '');
+          safeHtml = safeHtml.replace(/<\/?body[^>]*>/gi, '');
+          bodyEl.innerHTML = safeHtml;
         }
         cleanupLoadedImages(bodyEl);
         bindInAppLinks();
