@@ -1909,6 +1909,7 @@ function renderFeed(){
           });
         }
       }
+      }
     } else {
       const filtered=state.activeCat==='For You'?rankForYou(state.articles):state.articles.filter(a=>a.category===state.activeCat);
       if(state.activeCat==='For You'&&filtered.length>0) c+=renderDigest();
