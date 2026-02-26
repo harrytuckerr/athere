@@ -510,7 +510,7 @@ function defaultSources() {
 
 const CATEGORIES = ['For You','Tech','Australia','Sport','Photo','World','Auto','Reviews'];
 const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
-const APP_VERSION = 'V23';
+const APP_VERSION = 'V24';
 
 // Post-render: hide decorative images (quote marks, ornaments) based on loaded dimensions
 function cleanupLoadedImages(container) {
@@ -1817,7 +1817,7 @@ function _doRender(){
   document.body.classList.toggle('dark-bg', state.darkMode);
   s.innerHTML=renderHeader()+renderCatTabs()+renderFeed()+renderNav();
   if(state.selectedArticle)s.innerHTML+=renderReadingView();
-  // Review articles now open in normal reader view
+  if(state.selectedDevice)s.innerHTML+=renderReviewView();
   if(state.showSearch)s.innerHTML+=renderSearch();
   app().innerHTML='';
   app().appendChild(s);
@@ -1847,127 +1847,34 @@ function renderFeed(){
     if(state.loading){
       c=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div></div>`;
     } else if(state.activeCat==='Reviews'){
-      // ── Device Detail View ──
-      if(state.selectedDevice) {
-        const dev = state.selectedDevice;
-        const sourceList = dev.reviews.map(r=>r.source).filter((v,i,a)=>a.indexOf(v)===i);
-        const scores = dev.reviews.map(r=>r.score).filter(s=>s!==null);
-
-        c+=`<div style="padding-bottom:8px">`;
-        c+=`<button onclick="state.selectedDevice=null;render()" style="background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 12px;font-family:'DM Sans',sans-serif">← All Devices</button>`;
-        c+=`<div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:16px">`;
-        if(dev.image) c+=`<img src="${esc(dev.image)}" alt="" style="width:100px;height:100px;object-fit:cover;border-radius:14px;flex-shrink:0" onerror="this.style.display='none'">`;
-        c+=`<div style="flex:1;min-width:0">`;
-        c+=`<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:4px">${esc(dev.category)}</div>`;
-        c+=`<div style="font-family:'Instrument Serif',Georgia,serif;font-size:24px;line-height:1.2;color:var(--text);margin-bottom:6px">${esc(dev.name)}</div>`;
-        c+=`<div style="font-size:12px;color:var(--ts)">${dev.reviewCount} review${dev.reviewCount!==1?'s':''} across ${sourceList.length} source${sourceList.length!==1?'s':''}${dev.newsMentions ? ' · ' + dev.newsMentions + ' news mention' + (dev.newsMentions!==1?'s':'') : ''}</div>`;
-        if(dev.isTrending) c+=`<div style="margin-top:4px;font-size:11px;font-weight:600;color:#FF9F0A">🔥 Trending in your news feeds</div>`;
-        c+=`</div></div>`;
-
-        // Score summary
-        if(scores.length > 0) {
-          const sorted = [...scores].sort((a,b)=>a-b);
-          const median = sorted[Math.floor(sorted.length/2)];
-          const avg = +(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1);
-          const lo = sorted[0], hi = sorted[sorted.length-1];
-          const col = median>=8?'#34C759':median>=6?'#FF9F0A':'#FF453A';
-
-          c+=`<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px">`;
-          c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">`;
-          c+=`<div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.04em">Aggregated Score</div>`;
-          c+=`<div style="font-size:28px;font-weight:800;color:${col}">${median}<span style="font-size:14px;font-weight:500;color:var(--tt)">/10</span></div>`;
-          c+=`</div>`;
-          c+=`<div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${median*10}%;background:${col};border-radius:4px"></div></div>`;
-          c+=`<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ts)"><span>Low: ${lo}/10</span><span>Avg: ${avg}/10</span><span>High: ${hi}/10</span></div>`;
-          c+=`</div>`;
-        }
-
-        // Individual reviews
-        if(dev.reviews.length > 0) {
-          c+=`<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Individual Reviews</div>`;
-          dev.reviews.forEach(r => {
-            const scoreHtml = r.score !== null
-              ? `<span style="font-size:12px;font-weight:700;color:${r.score>=8?'#34C759':r.score>=6?'#FF9F0A':'#FF453A'};margin-left:auto;flex-shrink:0;padding:3px 8px;border-radius:6px;background:${r.score>=8?'rgba(52,199,89,.12)':r.score>=6?'rgba(255,159,10,.12)':'rgba(255,69,58,.12)'}">${r.score}/10</span>`
-              : '';
-            c+=`<div data-reviewurl="${esc(r.link)}" style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer">
-              <div style="flex:1;min-width:0">
-                <div style="font-size:11px;color:var(--accent);font-weight:600;margin-bottom:2px">${esc(r.source)}${r.score !== null ? '' : ' · No score'}</div>
-                <div style="font-size:14px;color:var(--text);line-height:1.3">${esc(r.title)}</div>
-                ${r.date ? `<div style="font-size:11px;color:var(--tt);margin-top:2px">${timeAgo(new Date(r.date))}</div>` : ''}
-              </div>
-              ${scoreHtml}
-            </div>`;
-          });
-        } else {
-          c+=`<div style="text-align:center;padding:24px;color:var(--tt);font-size:13px;background:var(--card);border-radius:12px;border:1px solid var(--border)">
-            <div style="font-size:24px;margin-bottom:8px">📰</div>
-            <div style="font-weight:600;margin-bottom:4px">Trending — no reviews yet</div>
-            <div>This device is being discussed in your news feeds but hasn't been reviewed in our review sources yet.</div>
-          </div>`;
-        }
-        c+=`</div>`;
-
-      } else {
-      // ── Device List View ──
       const devices = getFilteredDevices();
 
       if(state.reviewsLoading && devices.length === 0){
-        c+=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div><div style="font-size:13px;color:var(--tt);margin-top:16px">Scanning ${REVIEW_FEEDS.length} sources for trending devices...</div></div>`;
+        c+=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div><div style="font-size:13px;color:var(--tt);margin-top:16px">Scanning review sources for devices...</div></div>`;
       } else if(devices.length === 0 && !state.reviewsLoading){
         c+=`<div style="text-align:center;padding:60px 20px;color:var(--tt)"><div style="font-size:32px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:4px">No devices found</div><div style="font-size:12px;margin-bottom:16px">Tap refresh to scan review feeds</div><button onclick="fetchReviewFeeds()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Scan Reviews</button></div>`;
       } else {
-        // Category filter tabs
         c+=`<div class="cat-tabs" style="margin-bottom:16px">${REVIEW_CATEGORIES.map(cat=>`<button class="cat-tab${activeReviewCat===cat?' active':''}" data-reviewcat="${cat}">${cat}</button>`).join('')}</div>`;
-
-        const allDevs = getFilteredDevices();
-        const totalReviews = allDevs.reduce((s,d) => s + d.reviewCount, 0);
-        c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="section-label">${allDevs.length} device${allDevs.length!==1?'s':''} · ${totalReviews} review${totalReviews!==1?'s':''}</div><button onclick="fetchReviewFeeds()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">${state.reviewsLoading?'Scanning...':'↻ Refresh'}</button></div>`;
-
-        if(allDevs.length === 0){
+        const totalReviews = devices.reduce((s,d) => s + d.reviewCount, 0);
+        c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="section-label">${devices.length} device${devices.length!==1?'s':''} · ${totalReviews} review${totalReviews!==1?'s':''}</div><button onclick="fetchReviewFeeds()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">${state.reviewsLoading?'Scanning...':'↻ Refresh'}</button></div>`;
+        if(devices.length === 0){
           c+=`<div style="text-align:center;padding:40px 20px;color:var(--tt)">No devices in ${activeReviewCat}</div>`;
         } else {
-          allDevs.forEach((dev, idx) => {
-            const scoreBar = dev.medianScore !== null
-              ? `<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-                  <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden"><div style="height:100%;width:${dev.medianScore*10}%;background:${dev.medianScore>=8?'#34C759':dev.medianScore>=6?'#FF9F0A':'#FF453A'};border-radius:3px"></div></div>
-                  <span style="font-size:14px;font-weight:700;color:${dev.medianScore>=8?'#34C759':dev.medianScore>=6?'#FF9F0A':'#FF453A'};min-width:32px">${dev.medianScore}/10</span>
-                </div>`
-              : '';
-            const sourceList = dev.reviews.map(r => r.source).filter((v,i,a) => a.indexOf(v)===i);
-            const isFeatured = idx === 0;
-
-            if(isFeatured) {
-              const trendBadge = dev.isTrending ? `<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#FF9F0A;background:rgba(255,159,10,.12);padding:2px 6px;border-radius:4px;margin-left:4px">🔥 Trending</span>` : '';
-              c+=`<div class="card" data-device="${esc(dev.id)}" style="margin-bottom:16px;cursor:pointer;border-radius:16px;overflow:hidden;background:var(--card);border:1px solid var(--border)">
-                ${dev.image?`<div style="height:180px;overflow:hidden"><img src="${esc(dev.image)}" alt="" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`:''}
-                <div style="padding:16px">
-                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)">${esc(dev.category)}</span>
-                    <span style="font-size:11px;color:var(--tt)">· ${dev.time}</span>
-                    ${trendBadge}
-                  </div>
-                  <div style="font-family:'Instrument Serif',Georgia,serif;font-size:22px;line-height:1.2;color:var(--text);margin-bottom:4px">${esc(dev.name)}</div>
-                  <div style="font-size:12px;color:var(--ts)">${dev.reviewCount > 0 ? dev.reviewCount + ' review' + (dev.reviewCount!==1?'s':'') + ' · ' + sourceList.join(', ') : dev.newsMentions + ' news mention' + (dev.newsMentions!==1?'s':'')}</div>
-                  ${scoreBar}
-                </div></div>`;
-            } else {
-              const trendBadge = dev.isTrending ? `<span style="font-size:8px;font-weight:700;color:#FF9F0A;margin-left:4px">🔥</span>` : '';
-              c+=`<div class="card" data-device="${esc(dev.id)}" style="display:flex;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer">
-                ${dev.image?`<img src="${esc(dev.image)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:12px;flex-shrink:0" loading="lazy" onerror="this.style.display='none'">`:'<div style="width:64px;height:64px;border-radius:12px;background:var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px">📱</div>'}
-                <div style="flex:1;min-width:0">
-                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)">${esc(dev.category)}</span>
-                    <span style="font-size:11px;color:var(--tt)">· ${dev.time}</span>
-                    ${trendBadge}
-                  </div>
-                  <div style="font-family:'Instrument Serif',Georgia,serif;font-size:17px;line-height:1.25;color:var(--text)">${esc(dev.name)}</div>
-                  <div style="font-size:11px;color:var(--ts);margin-top:2px">${dev.reviewCount > 0 ? dev.reviewCount + ' review' + (dev.reviewCount!==1?'s':'') + ' · ' + sourceList.slice(0,3).join(', ') + (sourceList.length>3?' +more':'') : dev.newsMentions + ' news mention' + (dev.newsMentions!==1?'s':'')}</div>
-                  ${dev.medianScore !== null ? `<div style="display:flex;align-items:center;gap:6px;margin-top:4px"><div style="width:40px;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:${dev.medianScore*10}%;background:${dev.medianScore>=8?'#34C759':dev.medianScore>=6?'#FF9F0A':'#FF453A'};border-radius:2px"></div></div><span style="font-size:11px;font-weight:700;color:${dev.medianScore>=8?'#34C759':dev.medianScore>=6?'#FF9F0A':'#FF453A'}">${dev.medianScore}/10</span></div>` : ''}
-                </div></div>`;
-            }
+          devices.forEach(dev => {
+            const sc = dev.medianScore !== null ? (dev.medianScore >= 8 ? 'var(--success,#34C759)' : dev.medianScore >= 6 ? 'var(--warn,#FF9F0A)' : '#FF453A') : 'var(--tt)';
+            const scoreDisplay = dev.medianScore !== null ? dev.medianScore : '—';
+            const sourceList = dev.reviews.map(r=>r.source).filter((v,i,a)=>a.indexOf(v)===i);
+            const trendBadge = dev.isTrending ? ' · 🔥 Trending' : '';
+            c+=`<div class="review-card" data-device="${esc(dev.id)}">
+              ${dev.image?`<img class="review-img" src="${esc(dev.image)}" alt="" loading="lazy" onerror="this.style.display='none'">`:'<div class="review-img-placeholder"><span style="font-size:40px;opacity:.3">📱</span></div>'}
+              <div class="review-header">
+                <div class="review-score-pill" style="background:${sc}12;border:1px solid ${sc}25;color:${sc}">${scoreDisplay}</div>
+                <div><div class="review-meta">${esc(dev.category)} · ${dev.time} · ${dev.reviewCount} review${dev.reviewCount!==1?'s':''}${trendBadge}</div><div class="review-title">${esc(dev.name)}</div></div>
+              </div>
+              <div class="review-subtitle">${sourceList.join(', ')}${dev.reviewCount===0?' · Trending in news':''}</div>
+            </div>`;
           });
         }
-      }
       }
     } else {
       const filtered=state.activeCat==='For You'?rankForYou(state.articles):state.articles.filter(a=>a.category===state.activeCat);
@@ -2185,6 +2092,80 @@ function renderReadingView(){
     </div></div>`;
 }
 
+function renderReviewView(){
+  const dev = state.selectedDevice;
+  if(!dev) return '';
+  const scores = dev.reviews.map(r=>r.score).filter(s=>s!==null);
+  const sorted = [...scores].sort((a,b)=>a-b);
+  const median = scores.length > 0 ? sorted[Math.floor(sorted.length/2)] : null;
+  const avg = scores.length > 0 ? +(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1) : null;
+  const sc = median !== null ? (median >= 8 ? 'var(--success,#34C759)' : median >= 6 ? 'var(--warn,#FF9F0A)' : '#FF453A') : 'var(--tt)';
+  const sourceList = dev.reviews.map(r=>r.source).filter((v,i,a)=>a.indexOf(v)===i);
+
+  let h = `<div class="review-view">
+    <div style="position:absolute;top:0;left:0;width:0;height:2px;background:var(--accent);z-index:20" id="review-progress"></div>
+    <div class="reading-toolbar">
+      <button class="tb-icon" data-action="close-review"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+    </div>
+    <div class="review-scroll" id="review-scroll">
+      <div class="reading-source">${esc(dev.category)} · ${dev.time}${dev.isTrending?' · 🔥 Trending':''}</div>
+      <h1 class="reading-title">${esc(dev.name)}</h1>
+      <p style="font-size:15px;color:var(--ts);margin-bottom:20px;line-height:1.4">${dev.reviewCount} review${dev.reviewCount!==1?'s':''} across ${sourceList.length} source${sourceList.length!==1?'s':''}</p>
+      ${dev.image?`<img class="reading-hero" src="${esc(dev.image)}" alt="" onerror="this.style.display='none'">`:''}`;
+
+  // Aggregate score box
+  if(median !== null) {
+    h += `<div class="agg-box" style="background:${sc}08;border:1px solid ${sc}20">
+      <div class="agg-score" style="background:${sc}15;color:${sc}">${median}</div>
+      <div><div style="font-size:15px;font-weight:600;color:var(--text)">Aggregate Score</div><div style="font-size:12px;color:var(--tt);margin-top:2px">Based on ${scores.length} scored review${scores.length!==1?'s':''} · Avg ${avg}</div></div>
+    </div>`;
+  }
+
+  // Quick stats
+  if(dev.reviews.length > 0) {
+    const lo = sorted.length > 0 ? sorted[0] : null;
+    const hi = sorted.length > 0 ? sorted[sorted.length-1] : null;
+    if(lo !== null && hi !== null && sorted.length >= 2) {
+      h += `<div class="section-label">Score Range</div>`;
+      h += `<div class="spec-row"><div class="spec-top"><span class="spec-label">Lowest</span><span class="spec-value">${lo}/10</span></div></div>`;
+      h += `<div class="spec-row"><div class="spec-top"><span class="spec-label">Highest</span><span class="spec-value">${hi}/10</span></div></div>`;
+      h += `<div class="spec-row"><div class="spec-top"><span class="spec-label">Average</span><span class="spec-value">${avg}/10</span></div></div>`;
+      h += `<div class="spec-row" style="margin-bottom:24px"><div class="spec-top"><span class="spec-label">Reviews</span><span class="spec-value">${dev.reviewCount} from ${sourceList.length} sources</span></div></div>`;
+    }
+  }
+
+  // What Critics Say — each individual review
+  if(dev.reviews.length > 0) {
+    h += `<div class="section-label">What Critics Say</div>`;
+    dev.reviews.forEach(r => {
+      const rs = r.score !== null ? (r.score >= 8 ? 'var(--success,#34C759)' : r.score >= 6 ? 'var(--warn,#FF9F0A)' : '#FF453A') : 'var(--tt)';
+      h += `<div class="critic-card" data-reviewurl="${esc(r.link)}" style="cursor:pointer">
+        <div class="critic-top">
+          <span class="critic-pub">${esc(r.source)}</span>
+          ${r.score !== null ? `<div class="critic-score" style="background:${rs}15;border:1px solid ${rs}25;color:${rs}">${r.score}</div>` : ''}
+        </div>
+        <p class="critic-verdict">${esc(r.title)}</p>
+        ${r.date ? `<div style="font-size:11px;color:var(--tt);margin-top:4px">${timeAgo(new Date(r.date))}</div>` : ''}
+      </div>`;
+    });
+  } else {
+    h += `<div style="text-align:center;padding:32px;color:var(--tt);font-size:13px">
+      <div style="font-size:32px;margin-bottom:8px">📰</div>
+      <div style="font-weight:600;margin-bottom:4px">Trending — no reviews yet</div>
+      <div>This device is being discussed in your news feeds but hasn't been reviewed yet.</div>
+    </div>`;
+  }
+
+  if(dev.newsMentions && dev.newsMentions > 0) {
+    h += `<div style="margin-top:16px;padding:12px 16px;border-radius:12px;background:rgba(255,159,10,.06);border:1px solid rgba(255,159,10,.15)">
+      <div style="font-size:12px;font-weight:600;color:#FF9F0A">🔥 ${dev.newsMentions} mention${dev.newsMentions!==1?'s':''} in your news feeds</div>
+    </div>`;
+  }
+
+  h += `</div></div>`;
+  return h;
+}
+
 function renderSearch(){
   return`<div class="search-overlay"><div class="search-bar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--tt)" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><input id="search-input" type="text" placeholder="Search articles, reviews, topics..." autofocus><button class="search-cancel" data-action="close-search">Cancel</button></div><div class="search-results" id="search-results"></div></div>`;
 }
@@ -2228,6 +2209,7 @@ function bindEvents(){
       else if(act==='search'){state.showSearch=true;render();setTimeout(()=>$('#search-input')?.focus(),50)}
       else if(act==='close-search'){state.showSearch=false;render()}
       else if(act==='close-reading'){state.selectedArticle=null;state.richContent=null;state.richImages=[];state.fetchSource=null;render()}
+      else if(act==='close-review'){state.selectedDevice=null;render()}
 
       else if(act==='digest'){
         state.digestOpen=!state.digestOpen;
