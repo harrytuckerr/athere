@@ -36,8 +36,8 @@ body.dark-bg{background:#111110}
 }
 
 /* ===== THEME TOKENS ===== */
-.app-shell{--bg:#FAFAF8;--bg-alt:#F0EFEC;--bg-el:rgba(250,250,248,.92);--text:#1a1a1a;--ts:#555;--tt:#888;--tm:#aaa;--tf:#bbb;--accent:#C4493A;--border:rgba(0,0,0,.06);--success:#3A7D44;--warn:#B8860B;--nav-off:#bbb;--p-bg:#F0EFEC;--p-tx:#666;--pa-bg:#1a1a1a;--pa-tx:#FAFAF8;--sum-bg:#F5F4F1;--sum-bor:rgba(0,0,0,.06);--arch-bg:#EEF2FF;--arch-bor:#C7D2FE;--arch-tx:#4338CA;--trend-tx:#DC2626;--trend-bg:rgba(239,68,68,.06);--trend-bor:rgba(239,68,68,.15);--success-bg:rgba(58,125,68,.08);--success-bor:rgba(58,125,68,.2);--warn-bg:rgba(184,134,11,.06);--warn-bor:rgba(184,134,11,.15)}
-.app-shell.dark{--bg:#111110;--bg-alt:#1C1C1A;--bg-el:rgba(17,17,16,.92);--text:#E8E6E1;--ts:#aaa;--tt:#777;--tm:#555;--tf:#444;--accent:#D4695D;--border:rgba(255,255,255,.06);--success:#5DAA68;--warn:#D4A843;--nav-off:#555;--p-bg:#1C1C1A;--p-tx:#888;--pa-bg:#E8E6E1;--pa-tx:#111110;--sum-bg:#1A1A18;--sum-bor:rgba(255,255,255,.06);--arch-bg:rgba(99,102,241,.1);--arch-bor:rgba(99,102,241,.25);--arch-tx:#818CF8;--trend-tx:#F87171;--trend-bg:rgba(248,113,113,.08);--trend-bor:rgba(248,113,113,.2);--success-bg:rgba(93,170,104,.1);--success-bor:rgba(93,170,104,.25);--warn-bg:rgba(212,168,67,.08);--warn-bor:rgba(212,168,67,.2)}
+.app-shell{--bg:#FAFAF8;--bg-alt:#F0EFEC;--bg-el:rgba(250,250,248,.92);--text:#1a1a1a;--ts:#555;--tt:#888;--tm:#aaa;--tf:#bbb;--accent:#C4493A;--border:rgba(0,0,0,.06);--success:#3A7D44;--warn:#B8860B;--nav-off:#888;--p-bg:#F0EFEC;--p-tx:#666;--pa-bg:#1a1a1a;--pa-tx:#FAFAF8;--sum-bg:#F5F4F1;--sum-bor:rgba(0,0,0,.06);--arch-bg:#EEF2FF;--arch-bor:#C7D2FE;--arch-tx:#4338CA;--trend-tx:#DC2626;--trend-bg:rgba(239,68,68,.06);--trend-bor:rgba(239,68,68,.15);--success-bg:rgba(58,125,68,.08);--success-bor:rgba(58,125,68,.2);--warn-bg:rgba(184,134,11,.06);--warn-bor:rgba(184,134,11,.15)}
+.app-shell.dark{--bg:#111110;--bg-alt:#1C1C1A;--bg-el:rgba(17,17,16,.92);--text:#E8E6E1;--ts:#aaa;--tt:#777;--tm:#555;--tf:#444;--accent:#D4695D;--border:rgba(255,255,255,.06);--success:#5DAA68;--warn:#D4A843;--nav-off:#666;--p-bg:#1C1C1A;--p-tx:#888;--pa-bg:#E8E6E1;--pa-tx:#111110;--sum-bg:#1A1A18;--sum-bor:rgba(255,255,255,.06);--arch-bg:rgba(99,102,241,.1);--arch-bor:rgba(99,102,241,.25);--arch-tx:#818CF8;--trend-tx:#F87171;--trend-bg:rgba(248,113,113,.08);--trend-bor:rgba(248,113,113,.2);--success-bg:rgba(93,170,104,.1);--success-bor:rgba(93,170,104,.25);--warn-bg:rgba(212,168,67,.08);--warn-bor:rgba(212,168,67,.2)}
 
 .app-shell{background:var(--bg);color:var(--text)}
 
@@ -341,7 +341,7 @@ body.dark-bg{background:#111110}
 .bottom-nav{flex-shrink:0;height:80px;background:var(--bg-el);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;justify-content:space-around;align-items:flex-start;padding-top:10px;padding-bottom:env(safe-area-inset-bottom)}
 .nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;min-width:60px;position:relative;transition:.15s}
 .nav-item svg{color:var(--nav-off)}
-.nav-item span{font-size:10px;font-weight:500;color:var(--nav-off)}
+.nav-item span{font-size:11px;font-weight:600;color:var(--nav-off)}
 .nav-item.active svg,.nav-item.active span{color:var(--accent)}
 .nav-badge{position:absolute;top:-2px;right:12px;width:16px;height:16px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff}
 
@@ -483,7 +483,7 @@ function defaultSources() {
 
 const CATEGORIES = ['For You','Tech','Australia','Sport','Photo','World','Auto','Reviews'];
 const API_BASE = 'https://athere-worker.harrytuckerr.workers.dev';
-const APP_VERSION = 'V26';
+const APP_VERSION = 'V27';
 
 // Post-render: hide decorative images (quote marks, ornaments) based on loaded dimensions
 function cleanupLoadedImages(container) {
@@ -1265,7 +1265,7 @@ function renderHeader(){
   const weatherHtml = w ? `<div class="header-weather">${w.icon} ${w.temp}°${w.rain > 0 ? ` <span class="rain-chance">💧${w.rain}%</span>` : ''}</div>` : '';
   const meta=state.activeTab==='feed'?`<div class="header-meta">${new Date().toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'})} · ${state.loading?'Loading...':state.articles.length+' articles'}</div>`:'';
   // Add home button when on non-feed tabs (for tablet)
-  const homeBtn = state.activeTab !== 'feed' ? `<button class="icon-btn" data-action="go-feed" style="margin-right:auto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></button>` : '';
+  const homeBtn = state.activeTab !== 'feed' ? `<button class="icon-btn" data-action="go-feed" style="margin-right:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></button>` : '';
   return`<div class="header"><div class="header-row">${homeBtn}<h1>${titles[state.activeTab]}</h1><div style="flex:1"></div>${weatherHtml}<div class="header-btns">${searchBtn}<button class="icon-btn" data-action="dark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${dIcon}</svg></button></div></div>${meta}</div>`;
 }
 
@@ -1819,9 +1819,9 @@ function openArticle(article){
   trackEngagement(article,'click');
 
   if(article.link&&article.link!=='#'){
-    // Set loading state and render ONCE
-    state.richLoading=true;
-    if(article.pw) state.archiveLoading=true;
+    // Pre-cached content should be instant — only show loading for uncached
+    state.richLoading = !article.hasContent;
+    if(article.pw && !article.hasContent) state.archiveLoading=true;
     renderNow();
 
     // Fetch full article — pre-cached in backend, should be instant
@@ -1829,15 +1829,18 @@ function openArticle(article){
       state.richLoading=false;
       if(result){
         const fetchedLen = stripHtml(result.html).length;
-        const rssLen = stripHtml(article.rssHtml||article.content||'').length;
-        // For paywalled sources, require substantially more content (not just a few extra chars)
-        const minLen = article.pw ? Math.max(rssLen * 1.5, 800) : rssLen;
-        if (fetchedLen > minLen) {
+        // Backend already did paywall bypass — trust the result unless it's tiny
+        if (fetchedLen > 100) {
         let html = result.html;
         if (article.image) html = stripDuplicateHeroFromContent(html, article.image);
         state.richContent=html;
         state.richImages=result.images||[];
-        state.fetchSource='full';
+        state.fetchSource = result.method === 'rss' ? 'rss' : 'full';
+        // Mark as bypassed if backend got past paywall
+        if(article.pw && result.method && result.method !== 'rss' && result.method !== 'direct-truncated') {
+          state.archive = { found: true, method: result.method, url: result.archiveUrl };
+          state.archiveLoading = false;
+        }
         if(article.title==='Loading article...'&&result.title)article.title=result.title;
         if(!article.image&&result.ogImage)article.image=result.ogImage;
         if(result.subtitle&&!article.subtitle)article.subtitle=result.subtitle;
@@ -1902,9 +1905,9 @@ function openArticle(article){
       }
     });
 
-    // Archive chain for paywalled — runs quietly, renders only at end
-    if(article.pw){
-      runArchiveChain(article.link).then(r=>{state.archive=r;state.archiveLoading=false;render()});
+    // Archive chain for paywalled — only if backend didn't already bypass
+    if(article.pw && !article.hasContent){
+      runArchiveChain(article.link).then(r=>{if(!state.archive){state.archive=r;}state.archiveLoading=false;render()});
     }
   } else {
     renderNow();
