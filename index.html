@@ -367,34 +367,7 @@ if ('serviceWorker' in navigator) {
 // ============================================================
 // CORS PROXY — self-hosted endpoint first (Cloudflare Worker), then fallbacks
 // ============================================================
-const SELF_PROXY = '/proxy?url='; // Our own Cloudflare Worker proxy endpoint
-
-const CORS_PROXIES = [
-  url => `${SELF_PROXY}${encodeURIComponent(url)}`,
-  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-  url => `https://thingproxy.freeboard.io/fetch/${url}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-];
-
-async function fetchViaProxy(url, timeoutMs = 5000) {
-  for (const mkUrl of CORS_PROXIES) {
-    try {
-      const proxyUrl = mkUrl(url);
-      const controller = new AbortController();
-      // Self-proxy gets 2s (fast fail if not deployed), externals get full timeout
-      const isSelf = proxyUrl.startsWith('/');
-      const timer = setTimeout(() => controller.abort(), isSelf ? 2000 : timeoutMs);
-      const res = await fetch(proxyUrl, { signal: controller.signal });
-      clearTimeout(timer);
-      if (!res.ok) continue;
-      const text = await res.text();
-      // Validate we got real HTML, not an error page from the proxy
-      if (text.length > 500 && (text.includes('<') || text.includes('{'))) return text;
-    } catch {}
-  }
-  return null;
-}
+// (Proxy/CORS handling moved to backend worker)
 
 // ============================================================
 // STATE
@@ -509,8 +482,8 @@ function defaultSources() {
 }
 
 const CATEGORIES = ['For You','Tech','Australia','Sport','Photo','World','Auto','Reviews'];
-const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
-const APP_VERSION = 'V24';
+const API_BASE = 'https://athere-worker.harrytuckerr.workers.dev';
+const APP_VERSION = 'V25';
 
 // Post-render: hide decorative images (quote marks, ornaments) based on loaded dimensions
 function cleanupLoadedImages(container) {
@@ -948,58 +921,55 @@ function diversify(articles) {
 }
 
 // ============================================================
-// RSS FETCHING
+// DATA FETCHING — from backend worker API
 // ============================================================
 async function fetchRSS() {
-  const enabled = state.sources.filter(s => s.on);
-  const all = [];
-  
-  // Batch requests to avoid rss2json 429 rate limits (max ~6 concurrent)
-  const BATCH_SIZE = 6;
-  for (let i = 0; i < enabled.length; i += BATCH_SIZE) {
-    const batch = enabled.slice(i, i + BATCH_SIZE);
-    const results = await Promise.allSettled(batch.map(async src => {
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(RSS2JSON + encodeURIComponent(src.feed), { signal: controller.signal });
-        clearTimeout(timer);
-        if (!res.ok) return [];
-        const data = await res.json();
-        if (data.status !== 'ok' || !data.items) return [];
-        return data.items.slice(0, 8).map((item, idx) => ({
-          id: `${src.id}-${idx}`,
-          title: item.title || 'Untitled',
-          excerpt: stripHtml(item.description || item.content || '').slice(0, 300),
-          content: item.content || item.description || '',
-          rssHtml: item.content || item.description || '',
-          author: item.author || src.name,
-          date: fmtDate(item.pubDate),
-          rawDate: item.pubDate,
-          time: timeAgo(item.pubDate),
-          source: src.name,
-          sourceDomain: src.domain,
-          category: src.cat,
-          link: item.link || '#',
-          image: fixImgUrl(item.thumbnail || item.enclosure?.link || extractImg(item.description || item.content || '') || '') || null,
-          readTime: readTime(item.content || item.description || ''),
-          topics: extractTopics(item.title || '', src.cat),
-          pw: src.pw || false,
-        }));
-      } catch { return []; }
+  try {
+    const res = await fetch(`${API_BASE}/api/feed`);
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const data = await res.json();
+    return (data.articles || []).map(a => ({
+      id: a.id,
+      title: a.title || 'Untitled',
+      excerpt: a.excerpt || '',
+      content: a.content || '',
+      rssHtml: a.content || '',
+      author: a.author || a.source,
+      date: a.date || '',
+      rawDate: a.rawDate || '',
+      time: a.time || timeAgo(a.rawDate),
+      source: a.source,
+      sourceDomain: getDomain(a.link),
+      category: a.category,
+      link: a.link || '#',
+      image: a.image || null,
+      readTime: a.readTime || '1 min',
+      topics: extractTopics(a.title || '', a.category),
+      pw: a.pw || false,
     }));
-    results.forEach(r => { if (r.status === 'fulfilled') all.push(...r.value); });
-    // Render partial results so the UI updates progressively
-    if (all.length > 0 && i + BATCH_SIZE < enabled.length) {
-      state.articles = [...all].sort((a, b) => new Date(b.rawDate || 0) - new Date(a.rawDate || 0));
-      render();
-    }
-    // Small delay between batches to avoid rate limits
-    if (i + BATCH_SIZE < enabled.length) await new Promise(r => setTimeout(r, 400));
+  } catch (e) {
+    console.warn('[API] Feed fetch failed, falling back to direct RSS:', e);
+    return []; // Frontend shows empty state gracefully
   }
-  all.sort((a, b) => new Date(b.rawDate || 0) - new Date(a.rawDate || 0));
-  return all;
 }
+
+async function fetchReviews() {
+  try {
+    const res = await fetch(`${API_BASE}/api/reviews`);
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const data = await res.json();
+    state.reviewDevices = data.devices || [];
+    state.reviewCategories = data.categories || [];
+    state.reviewsLoading = false;
+    render();
+  } catch (e) {
+    console.warn('[API] Reviews fetch failed:', e);
+    state.reviewsLoading = false;
+    render();
+  }
+}
+
+
 
 // ============================================================
 // FULL ARTICLE FETCHING — two-tier: RSS content first, proxy second
@@ -1035,192 +1005,23 @@ function parseRssContent(htmlStr) {
 
 async function fetchFullArticle(url) {
   try {
-    // Total timeout: 12 seconds max for article fetch
-    const result = await Promise.race([
-      (async () => {
-        const html = await fetchViaProxy(url);
-        if (!html) return null;
-        if (isLiveBlog(html, url)) { const lb = extractLiveBlog(html, url); if (lb) return lb; }
-        return extractArticle(html, url);
-      })(),
-      new Promise(resolve => setTimeout(() => resolve(null), 12000))
-    ]);
-    return result;
+    const res = await fetch(`${API_BASE}/api/article?url=${encodeURIComponent(url)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.error) return null;
+    return {
+      title: data.title || null,
+      html: data.html || '',
+      ogImage: data.image || null,
+      images: [],
+      author: data.author || null,
+      subtitle: null,
+      method: data.method,
+      archiveUrl: data.archiveUrl || null,
+    };
   } catch { return null; }
 }
 
-function extractArticle(html, baseUrl) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const base = new URL(baseUrl);
-
-  // Get metadata
-  const pageTitle = doc.querySelector('meta[property="og:title"]')?.content || doc.querySelector('title')?.textContent || '';
-  const ogImage = doc.querySelector('meta[property="og:image"]')?.content || doc.querySelector('meta[name="twitter:image"]')?.content || null;
-  const subtitle = doc.querySelector('meta[property="og:description"]')?.content || doc.querySelector('[class*="standfirst"],[class*="subtitle"],[class*="dek"],[class*="strapline"]')?.textContent?.trim() || '';
-  const author = doc.querySelector('meta[name="author"]')?.content || doc.querySelector('[rel="author"],[class*="byline"] a,[class*="author-name"]')?.textContent?.trim() || '';
-  const pubDate = doc.querySelector('meta[property="article:published_time"]')?.content || doc.querySelector('time[datetime]')?.getAttribute('datetime') || '';
-
-  // Shared DOM cleanup
-  cleanDom(doc);
-
-  // Content area detection
-  const selectors = [
-    'article','[role="article"]','.article-body','.article-content','.post-content',
-    '.entry-content','.story-body','main .content','.c-entry-content','.article__body',
-    '.caas-body','.article__content','.ArticleBody-articleBody','.article-text',
-    '.story__content','.body-copy','.article_body','.article-main','.post-body',
-    '#article-body','#story-body','.content-body','.field-body','.wysiwyg','.prose',
-    '.article-detail','.news-article','.single-post-content','.entry-body',
-    '.editorial-content','.RichTextStoryBody','.ArticleBodyWrapper',
-    '.l-container .article-body','.Page-content','[data-module="ArticleBody"]',
-    '.article-page','.story-content','.post-entry','.td-post-content',
-  ];
-
-  let el = null;
-  for (const sel of selectors) {
-    el = doc.querySelector(sel);
-    if (el && el.textContent.trim().length > 200) break;
-    el = null;
-  }
-  if (!el) {
-    const candidates = [...doc.querySelectorAll('main, .content, #content, .post, .story, [class*="article"], [class*="content"]')];
-    el = candidates.sort((a, b) => b.textContent.length - a.textContent.length)[0] || doc.body;
-  }
-
-  // Fix relative URLs and malformed double-URLs
-  el.querySelectorAll('img').forEach(img => {
-    let src = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-original') || img.getAttribute('data-lazy-src') || (img.getAttribute('srcset') || '').split(',')[0]?.trim()?.split(' ')[0];
-    if (src) {
-      src = fixImgUrl(src);
-      if (src.startsWith('//')) src = 'https:' + src;
-      else if (src.startsWith('/')) src = base.origin + src;
-      img.setAttribute('src', src);
-    }
-  });
-  el.querySelectorAll('a').forEach(a => {
-    let href = a.getAttribute('href');
-    if (href && href.startsWith('/')) a.setAttribute('href', base.origin + href);
-  });
-
-  // Use shared node processor
-  const nodes = el.querySelectorAll('p, h2, h3, h4, figure, blockquote, ul, ol, img, iframe, .twitter-tweet, .instagram-media, [data-datawrapper-src]');
-  const result = processNodes(nodes, { heroKey: ogImage ? imgKey(ogImage) : null });
-
-  if (stripHtml(result.html).length < 100) return null;
-  const clean = postProcessHtml(result.html);
-  return { html: clean, images: result.images, title: pageTitle, ogImage, subtitle, author, pubDate, isLiveBlog: false };
-}
-
-// ============================================================
-// LIVE BLOG DETECTION & FORMATTING
-// ============================================================
-function isLiveBlog(html, url) {
-  // URL patterns
-  if (/\/live\//i.test(url)) return true;
-  if (/\/liveblog\//i.test(url)) return true;
-  // HTML class/element patterns
-  const head = html.slice(0, 8000);
-  if (/liveblog|live-blog|live-feed|live-update|is-live/i.test(head)) return true;
-  if (/data-gu-marker|js-liveblog|LiveBlogPosting/i.test(head)) return true;
-  // Multiple timestamp blocks suggest live blog
-  const timestampCount = (head.match(/\d{1,2}[:.]\d{2}\s*(am|pm|AEST|AEDT|GMT|UTC|BST|ET|PT)/gi) || []).length;
-  if (timestampCount > 3) return true;
-  // Guardian meta tag
-  if (/og:type.*liveblog/i.test(head)) return true;
-  return false;
-}
-
-function extractLiveBlog(html, baseUrl) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const base = new URL(baseUrl);
-
-  const pageTitle = doc.querySelector('meta[property="og:title"]')?.content || doc.querySelector('title')?.textContent || '';
-  const ogImage = doc.querySelector('meta[property="og:image"]')?.content || null;
-
-  // Remove junk
-  doc.querySelectorAll('script,style,nav,footer,header,.ad,.ads,aside,.sidebar,.comments,noscript,iframe,.cookie-banner,.consent').forEach(e => e.remove());
-
-  // Try to find live blog entries — various CMS patterns
-  const entrySelectors = [
-    // Guardian-specific
-    '[data-gu-marker="body"]', '.block', 'div[id^="block-"]', '.live-blog-blocks .block',
-    '[data-liveblog-entry]', '.blog-post', '.live-blog__block', '.block--content',
-    '.liveblock', '.live-feed-item', '.timeline-item',
-    '.liveblog-entry', '.pinboard-item', '.key-event', '.live-blog-entry',
-    'article.block', '.update-entry', '[data-key-event]',
-    // Generic timestamp-based blocks
-    '.timestamp-block', '.update', '.event-block',
-  ];
-
-  let entries = [];
-  for (const sel of entrySelectors) {
-    const found = doc.querySelectorAll(sel);
-    if (found.length > 2) {
-      entries = [...found];
-      break;
-    }
-  }
-
-  if (entries.length < 2) {
-    // Fallback: find divs with IDs that look like timestamped blocks
-    const blockDivs = [...doc.querySelectorAll('div[id^="block-"], div[id^="liveblog-"], div[id^="update-"]')];
-    if (blockDivs.length > 2) entries = blockDivs;
-  }
-
-  if (entries.length < 2) {
-    // Fallback: look for timestamp + content patterns
-    return null; // Let normal extraction handle it
-  }
-
-  let blogHtml = '';
-  const seenKeys = new Set();
-  // Process ALL entries, not just first 30
-  entries.forEach(entry => {
-    // Try to find timestamp
-    const timeEl = entry.querySelector('time, .block-time, .timestamp, [data-time], .live-blog__time, .block__time, .block-time__absolute, .content__dateline-time, aside time');
-    const timeText = timeEl?.textContent?.trim() || timeEl?.getAttribute('datetime')?.replace('T',' ').slice(0,16) || '';
-
-    // Check if key event
-    const isKey = entry.matches('[data-key-event], .key-event, .is-key-event, .block--key-event') ||
-                  entry.querySelector('.key-event, [data-key-event], .block--key-event-badge') !== null ||
-                  entry.getAttribute('data-is-key-event') === 'true';
-
-    // Get content — try various content containers
-    const bodyEl = entry.querySelector('.block-body, .block-content, .live-blog__body, .block__body, .block-elements, .block__content') || entry;
-    const title = entry.querySelector('h2, h3, .block-title, .block__title, .block-elements h2');
-
-    let entryContent = '';
-    if (title) entryContent += `<h3>${title.textContent.trim()}</h3>`;
-
-    bodyEl.querySelectorAll('p, img, blockquote').forEach(node => {
-      if (node.tagName === 'IMG') {
-        let src = node.getAttribute('src') || node.getAttribute('data-src') || '';
-        if (src.startsWith('/')) src = base.origin + src;
-        if (src && !isJunkImg(src) && !isAuthorImg(node)) {
-          entryContent += `<figure><img src="${esc(src)}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"></figure>`;
-        }
-      } else {
-        const text = node.innerHTML.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'');
-        if (stripHtml(text).trim().length > 5) entryContent += `<p>${text}</p>`;
-      }
-    });
-
-    if (!entryContent.trim()) return;
-
-    const keyTag = isKey ? '<div style="display:inline-block;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--accent);color:#fff;margin-bottom:10px">Key Event</div>' : '';
-    const timeTag = timeText ? `<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;font-family:'DM Sans',sans-serif;letter-spacing:.02em">${esc(timeText)}</div>` : '';
-
-    blogHtml += `<div style="padding:20px;margin-bottom:16px;border-radius:12px;background:var(--bg-alt);border:1px solid var(--border)">${keyTag}${timeTag}${entryContent}</div>`;
-  });
-
-  if (!blogHtml) return null;
-
-  const header = `<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.15);margin-bottom:20px"><span style="width:8px;height:8px;border-radius:50%;background:#DC2626;animation:pulse 2s infinite"></span><span style="font-size:12px;font-weight:600;color:#DC2626;font-family:'DM Sans',sans-serif">LIVE</span></div>`;
-
-  return { html: header + blogHtml, images: [], title: pageTitle, ogImage, isLiveBlog: true };
-}
 
 function isJunkImg(src) {
   // Tracking pixels, icons, avatars, favicons
@@ -1319,35 +1120,18 @@ function isSameImage(url1, url2) {
 }
 
 // ============================================================
-// ARCHIVE FALLBACK CHAIN
+// ARCHIVE — backend handles bypass, this just provides manual archive links
 // ============================================================
-const ARCHIVE_STEPS = [
-  { id:'wayback', label:'Wayback Machine', icon:'📦' },
-  { id:'archiveToday', label:'Archive.today', icon:'📋' },
-  { id:'googleCache', label:'Google Cache', icon:'🔍' },
-  { id:'reader', label:'Reader Mode', icon:'📖' },
-];
-
 async function runArchiveChain(url) {
-  // Step 1: Wayback — don't render each step, just update state
-  state.archiveStep = 0;
+  // Backend already tried archives during fetchFullArticle
+  // This provides manual fallback links for the user
   try {
     const r = await fetch(`https://archive.org/wayback/available?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(5000) });
     const d = await r.json();
     if (d?.archived_snapshots?.closest?.available) {
-      return { found: true, method: 'wayback', url: d.archived_snapshots.closest.url, step: 0 };
+      return { found: true, method: 'wayback', url: d.archived_snapshots.closest.url };
     }
   } catch {}
-
-  // Step 2: Archive.today
-  state.archiveStep = 1;
-  await new Promise(r => setTimeout(r, 200));
-
-  // Step 3: Google Cache
-  state.archiveStep = 2;
-  await new Promise(r => setTimeout(r, 200));
-
-  state.archiveStep = 3;
   return {
     found: false,
     method: 'multi',
@@ -1365,364 +1149,9 @@ function getTldr(article) {
 }
 
 
-// ============================================================
-// REVIEWS — Device-first aggregated review system
-// ============================================================
-// Flow: Define trending devices → fetch review feeds → match → aggregate scores
-// Caches to localStorage for 24h. Loads on app start after first paint.
-
-const REVIEW_SOURCES = [
-  { name:'The Verge', feed:'https://www.theverge.com/rss/reviews/index.xml' },
-  { name:'TechRadar', feed:'https://www.techradar.com/rss/reviews' },
-  { name:'Ars Technica', feed:'https://feeds.arstechnica.com/arstechnica/gadgets' },
-  { name:'GSMArena', feed:'https://www.gsmarena.com/rss-news-reviews.php3' },
-  { name:'Wired', feed:'https://www.wired.com/feed/category/gear/latest/rss' },
-  { name:'CNET', feed:'https://www.cnet.com/rss/reviews/' },
-  { name:'Android Authority', feed:'https://www.androidauthority.com/feed/' },
-  { name:'9to5Mac', feed:'https://9to5mac.com/feed/' },
-  { name:'Tom\'s Hardware', feed:'https://www.tomshardware.com/feeds/all' },
-  { name:'What Hi-Fi', feed:'https://www.whathifi.com/feeds/all' },
-];
-
-const REVIEW_CACHE_KEY = 'athere_review_cache';
-const REVIEW_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-
-const REVIEW_CATEGORIES = ['All','Phones','Laptops','Cameras','Audio','Gaming','TVs','Wearables','Smart Home'];
 let activeReviewCat = 'All';
-
-// ── Known device patterns (for extraction from titles) ──────
-const DEVICE_PATTERNS = [
-  // Phones
-  /\b(Samsung Galaxy [A-Z]\d{1,2}[\w+ ]*(?:Ultra|Plus|FE)?)/i,
-  /\b(Google Pixel \d[\w ]*(?:Pro|a)?)/i,
-  /\b(iPhone \d{1,2}[\w ]*(?:Pro Max|Pro|Plus|e)?)/i,
-  /\b(OnePlus \d{1,2}[\w ]*(?:Pro|T)?)/i,
-  /\b(Nothing Phone \(?\d\)?[\w ]*)/i,
-  /\b(Motorola (?:Edge|Razr)[\w+ ]*)/i,
-  /\b(Xiaomi \d{1,2}[\w ]*(?:Ultra|Pro|T)?)/i,
-  // Laptops
-  /\b(MacBook (?:Air|Pro)[\w ]*(?:M\d[\w ]*)?)(?:\s*[\(,:]|$|\s)/i,
-  /\b(ThinkPad [A-Z]\d{1,2}[\w ]*)/i,
-  /\b(Dell XPS \d{1,2}[\w ]*)/i,
-  /\b(Surface (?:Pro|Laptop|Go)[\w ]*\d*)/i,
-  /\b(ASUS (?:ZenBook|ROG|TUF|Vivobook)[\w ]*)/i,
-  /\b(Framework Laptop[\w ]*)/i,
-  /\b(HP (?:Spectre|Pavilion|Omen)[\w ]*)/i,
-  // Cameras & Lenses
-  /\b(Fujifilm [A-Z][-\w]+[\w ]*(?:II|III|IV|V)?)/i,
-  /\b(Sony (?:A|Alpha )\d{3,4}[\w ]*(?:II|III|IV)?)/i,
-  /\b(Sony (?:ZV|FX)[-\w]+)/i,
-  /\b(Canon (?:EOS |)R\d{1,2}[\w ]*)/i,
-  /\b(Nikon Z\d{1,2}[\w ]*(?:II|III)?)/i,
-  /\b(DJI [\w]+ \d[\w ]*)/i,
-  /\b(GoPro (?:Hero|Max)[\w ]*\d*)/i,
-  /\b(Sigma \d+mm[\w ]*)/i,
-  /\b(Tamron \d+[-–]\d+mm[\w ]*)/i,
-  // Audio
-  /\b(AirPods (?:Pro|Max)[\w ]*\d*)/i,
-  /\b(Sony WH-[-\w]+)/i,
-  /\b(Sony WF-[-\w]+)/i,
-  /\b(Bose (?:QuietComfort|QC)[\w ]*\d*)/i,
-  /\b(Sennheiser (?:Momentum|HD|IE)[\w ]*)/i,
-  /\b(Samsung Galaxy Buds[\w ]*\d*[\w ]*)/i,
-  /\b(Sonos [\w]+[\w ]*)/i,
-  /\b(JBL [\w]+[\w ]*\d+)/i,
-  // Gaming
-  /\b(Nintendo Switch[\w ]*\d*)/i,
-  /\b(Steam Deck[\w ]*)/i,
-  /\b(PlayStation (?:5|Portal)[\w ]*)/i,
-  /\b(PS5[\w ]*(?:Pro|Slim)?)/i,
-  /\b(Xbox (?:Series [XS])[\w ]*)/i,
-  /\b(ROG Ally[\w ]*)/i,
-  /\b((?:RTX|GeForce RTX) \d{4}[\w ]*)/i,
-  /\b(Radeon RX \d{4}[\w ]*)/i,
-  // TVs
-  /\b(Samsung (?:S9|QN|S95|QE|TU)\w+)/i,
-  /\b(LG (?:C4|G4|B4|C3|G3|OLED)\w*)/i,
-  /\b(Sony (?:A95|A80|X90|Bravia)\w*)/i,
-  /\b(TCL [\w]+\d{2,}[\w]*)/i,
-  /\b(Hisense [\w]+\d{2,}[\w]*)/i,
-  // Wearables
-  /\b(Apple Watch (?:Ultra|SE|Series)[\w ]*\d*)/i,
-  /\b(Galaxy Watch[\w ]*\d*[\w ]*)/i,
-  /\b(Garmin (?:Fenix|Forerunner|Venu|Epix)[\w ]*\d*)/i,
-  /\b(Oura Ring[\w ]*\d*)/i,
-  /\b(Samsung Galaxy Ring[\w ]*)/i,
-  /\b(Fitbit [\w]+[\w ]*)/i,
-  // Tablets
-  /\b(iPad (?:Air|Pro|mini)[\w ]*(?:M\d)?)/i,
-  /\b(Galaxy Tab [A-Z]\d{1,2}[\w ]*)/i,
-  // Smart Home
-  /\b(Apple (?:HomePod|TV)[\w ]*)/i,
-  /\b(Amazon Echo[\w ]*\d*)/i,
-  /\b(Google (?:Nest|Home)[\w ]*)/i,
-  /\b(Ring (?:Video Doorbell|Spotlight|Floodlight)[\w ]*)/i,
-  /\b(Ecobee [\w]+[\w ]*)/i,
-];
-
-function extractDeviceName(title) {
-  if (!title) return null;
-  for (const pat of DEVICE_PATTERNS) {
-    const m = title.match(pat);
-    if (m) return m[1].trim().replace(/\s+/g, ' ');
-  }
-  return null;
-}
-
-function normalizeDevice(name) {
-  return name.toLowerCase()
-    .replace(/\s*\(.*?\)/g, '')
-    .replace(/\s*(review|hands.on|first.look|preview|test|verdict).*$/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function categorizeDevice(name) {
-  const n = (name||'').toLowerCase();
-  if (/galaxy\s*s|pixel\s*\d|iphone|oneplus|nothing\s*phone|moto|razr|redmi|poco|galaxy\s*a\d|xiaomi/i.test(n)) return 'Phones';
-  if (/macbook|thinkpad|xps|spectre|surface\s*(pro|laptop)|zenbook|rog\s*(zephyrus|strix)|vivobook|framework|omen|pavilion/i.test(n)) return 'Laptops';
-  if (/fujifilm|x-t|x-h|x100|sony\s*a\d|alpha|canon\s*(r|eos)|nikon\s*z|leica|dji|gopro|sigma\s*\d+mm|tamron|zv-|fx\d/i.test(n)) return 'Cameras';
-  if (/airpods|wh-|wf-|buds|headphone|earbud|bose|sennheiser|sonos|speaker|soundbar|jbl|what\s*hi/i.test(n)) return 'Audio';
-  if (/switch|steam\s*deck|playstation|ps5|xbox|rog\s*ally|rtx|radeon|geforce/i.test(n)) return 'Gaming';
-  if (/samsung\s*s9|qn\d|s95|lg\s*(c4|g4|b4|c3|oled)|sony\s*(a95|a80|bravia)|tcl|hisense|tv\b/i.test(n)) return 'TVs';
-  if (/watch|garmin|fitbit|oura|ring\b(?!.*doorbell)|band|tracker/i.test(n)) return 'Wearables';
-  if (/ipad|galaxy\s*tab/i.test(n)) return 'Laptops';
-  if (/homepod|echo|nest|ring\s*(video|spotlight|floodlight)|ecobee|home\s*hub/i.test(n)) return 'Smart Home';
-  return null;
-}
-
-function extractScore(text) {
-  if (!text) return null;
-  // "8/10", "8.5/10"
-  const m10 = text.match(/(\d+(?:\.\d+)?)\s*\/\s*10/);
-  if (m10) return parseFloat(m10[1]);
-  // "4/5", "4.5/5" → scale to /10
-  const m5 = text.match(/(\d+(?:\.\d+)?)\s*\/\s*5/);
-  if (m5) return Math.round(parseFloat(m5[1]) * 2 * 10) / 10;
-  // "85/100", "92/100" → scale to /10
-  const m100 = text.match(/(\d{2,3})\s*\/\s*100/);
-  if (m100) return Math.round(parseInt(m100[1]) / 10 * 10) / 10;
-  // "★★★★" or star rating text "4 stars"
-  const stars = text.match(/(\d(?:\.\d)?)\s*stars?/i);
-  if (stars) return Math.round(parseFloat(stars[1]) * 2 * 10) / 10;
-  // Percentage like "85%" in review context
-  const pct = text.match(/(?:score|rating|verdict)[:\s]*(\d{2,3})%/i);
-  if (pct) return Math.round(parseInt(pct[1]) / 10 * 10) / 10;
-  return null;
-}
-
-function hashCode(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  return Math.abs(h).toString(36);
-}
-
-// ── Cache ────────────────────────────────────────────────────
-function loadReviewCache() {
-  try {
-    const raw = localStorage.getItem(REVIEW_CACHE_KEY);
-    if (!raw) return null;
-    const { devices, timestamp } = JSON.parse(raw);
-    if (Date.now() - timestamp < REVIEW_CACHE_TTL && devices && devices.length > 0) {
-      console.log('[Reviews] Loaded from cache, age:', Math.round((Date.now() - timestamp) / 60000), 'min');
-      return devices;
-    }
-  } catch(e) { console.warn('[Reviews] Cache read error:', e); }
-  return null;
-}
-
-function saveReviewCache(devices) {
-  try {
-    localStorage.setItem(REVIEW_CACHE_KEY, JSON.stringify({
-      devices: devices.slice(0, 50), // Cap storage size
-      timestamp: Date.now()
-    }));
-    console.log('[Reviews] Saved', devices.length, 'devices to cache');
-  } catch(e) { console.warn('[Reviews] Cache write error:', e); }
-}
-
-// ── Fetch & Aggregate ───────────────────────────────────────
-async function fetchReviewFeeds() {
-  if (state.reviewsLoading) return;
-  state.reviewsLoading = true;
-  render();
-
-  const rawArticles = [];
-
-  function parseRssXml(xml, sourceName) {
-    try {
-      const doc = new DOMParser().parseFromString(xml, 'text/xml');
-      doc.querySelectorAll('item').forEach(item => {
-        const title = item.querySelector('title')?.textContent || '';
-        const link = item.querySelector('link')?.textContent || '';
-        const desc = item.querySelector('description')?.textContent || '';
-        const content = item.querySelector('content\\:encoded')?.textContent || desc;
-        const pubDate = item.querySelector('pubDate')?.textContent || '';
-        const mediaEl = item.querySelector('media\\:content, media\\:thumbnail');
-        const enclosure = item.querySelector('enclosure');
-        let img = mediaEl?.getAttribute('url') || enclosure?.getAttribute('url') || extractImg(content || desc) || null;
-        if (img) img = fixImgUrl(img);
-        rawArticles.push({
-          title, link, source: sourceName, image: img, date: pubDate,
-          desc: stripHtml(desc||content).slice(0,300),
-          fullText: stripHtml(content||desc).slice(0,500),
-        });
-      });
-    } catch(e) { console.warn('[Reviews] XML parse error:', sourceName, e); }
-  }
-
-  // Fetch all review feeds
-  const BATCH = 4;
-  for (let i = 0; i < REVIEW_SOURCES.length; i += BATCH) {
-    const batch = REVIEW_SOURCES.slice(i, i + BATCH);
-    await Promise.allSettled(batch.map(async (rf) => {
-      // Try proxy first
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(`/proxy?url=${encodeURIComponent(rf.feed)}`, { signal: controller.signal });
-        clearTimeout(timer);
-        if (res.ok) {
-          const text = await res.text();
-          if (text.includes('<rss') || text.includes('<feed') || text.includes('<channel')) {
-            parseRssXml(text, rf.name);
-            return;
-          }
-        }
-      } catch {}
-      // Fallback: rss2json
-      try {
-        const r = await fetch(`${RSS2JSON}${encodeURIComponent(rf.feed)}`);
-        if (!r.ok) return;
-        const d = await r.json();
-        if (d.status !== 'ok' || !d.items) return;
-        d.items.forEach(item => {
-          let img = item.thumbnail || item.enclosure?.link || extractImg(item.description || item.content || '') || null;
-          if (img) img = fixImgUrl(img);
-          rawArticles.push({
-            title: item.title || '', link: item.link || '', source: rf.name,
-            image: img, date: item.pubDate,
-            desc: stripHtml(item.description || item.content || '').slice(0, 300),
-            fullText: stripHtml(item.content || item.description || '').slice(0, 500),
-          });
-        });
-      } catch(e) { console.warn('[Reviews] Feed error:', rf.name, e); }
-    }));
-    if (i + BATCH < REVIEW_SOURCES.length) await new Promise(r => setTimeout(r, 300));
-  }
-
-  console.log('[Reviews] Fetched', rawArticles.length, 'articles from', REVIEW_SOURCES.length, 'sources');
-
-  // ── Match articles to devices ──────────────────────────────
-  const deviceMap = {};
-
-  // Also check news articles for trending signal
-  const newsMentions = {};
-  (state.articles || []).forEach(a => {
-    const dev = extractDeviceName(a.title);
-    if (dev) {
-      const key = normalizeDevice(dev);
-      newsMentions[key] = (newsMentions[key] || 0) + 1;
-    }
-  });
-
-  rawArticles.forEach(article => {
-    const deviceName = extractDeviceName(article.title);
-    if (!deviceName) return;
-
-    const key = normalizeDevice(deviceName);
-    const cat = categorizeDevice(key);
-    if (!cat) return;
-
-    if (!deviceMap[key]) {
-      deviceMap[key] = {
-        id: 'dev-' + hashCode(key),
-        name: deviceName,
-        category: cat,
-        reviews: [],
-        image: null,
-        latestDate: null,
-        newsMentions: newsMentions[key] || 0,
-      };
-    }
-
-    const dev = deviceMap[key];
-    if (deviceName.length > dev.name.length) dev.name = deviceName;
-
-    const score = extractScore(article.title + ' ' + article.desc + ' ' + article.fullText);
-    dev.reviews.push({
-      source: article.source,
-      title: article.title,
-      link: article.link,
-      score,
-      desc: article.desc,
-      date: article.date,
-      image: article.image,
-    });
-
-    if (article.image && !dev.image) dev.image = article.image;
-    const d = new Date(article.date);
-    if (!isNaN(d) && (!dev.latestDate || d > dev.latestDate)) dev.latestDate = d;
-  });
-
-  // Also add news-only trending devices (no reviews but lots of buzz)
-  Object.entries(newsMentions).forEach(([key, count]) => {
-    if (!deviceMap[key] && count >= 2) {
-      const newsArticle = (state.articles || []).find(a => {
-        const d = extractDeviceName(a.title);
-        return d && normalizeDevice(d) === key;
-      });
-      if (newsArticle) {
-        const devName = extractDeviceName(newsArticle.title);
-        const cat = categorizeDevice(key);
-        if (cat) {
-          deviceMap[key] = {
-            id: 'dev-' + hashCode(key),
-            name: devName, category: cat, reviews: [],
-            image: newsArticle.image || null,
-            latestDate: new Date(newsArticle.rawDate || Date.now()),
-            newsMentions: count,
-          };
-        }
-      }
-    }
-  });
-
-  // ── Build sorted device list ───────────────────────────────
-  const devices = Object.values(deviceMap).map(d => {
-    const scores = d.reviews.map(r => r.score).filter(s => s !== null);
-    scores.sort((a,b) => a - b);
-    const median = scores.length > 0 ? scores[Math.floor(scores.length / 2)] : null;
-    const avg = scores.length > 0 ? +(scores.reduce((a,b) => a+b, 0) / scores.length).toFixed(1) : null;
-    const trendScore = d.reviews.length * 3 + (d.newsMentions || 0);
-    return {
-      ...d,
-      reviewCount: d.reviews.length,
-      medianScore: median,
-      avgScore: avg,
-      scoreCount: scores.length,
-      trendScore,
-      time: d.latestDate ? timeAgo(d.latestDate) : 'recently',
-      isTrending: (d.newsMentions || 0) >= 2,
-    };
-  }).sort((a, b) => b.trendScore - a.trendScore || (b.latestDate - a.latestDate));
-
-  state.reviewDevices = devices;
-  state.reviewsLoading = false;
-  saveReviewCache(devices);
-  render();
-}
-
-function loadReviewsOnStart() {
-  const cached = loadReviewCache();
-  if (cached) {
-    state.reviewDevices = cached;
-    render();
-  } else {
-    // No cache — fetch fresh after a short delay (don't block first paint)
-    setTimeout(() => fetchReviewFeeds(), 3000);
-  }
-}
+const DEFAULT_REVIEW_CATS = ['All','Phones','Laptops','Cameras','Audio','TVs','Gaming','Wearables','Smart Home'];
+function getReviewCategories() { return (state.reviewCategories && state.reviewCategories.length > 0) ? state.reviewCategories : DEFAULT_REVIEW_CATS; }
 
 function getFilteredDevices() {
   const all = state.reviewDevices || [];
@@ -1852,11 +1281,11 @@ function renderFeed(){
       if(state.reviewsLoading && devices.length === 0){
         c+=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div><div style="font-size:13px;color:var(--tt);margin-top:16px">Scanning review sources for devices...</div></div>`;
       } else if(devices.length === 0 && !state.reviewsLoading){
-        c+=`<div style="text-align:center;padding:60px 20px;color:var(--tt)"><div style="font-size:32px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:4px">No devices found</div><div style="font-size:12px;margin-bottom:16px">Tap refresh to scan review feeds</div><button onclick="fetchReviewFeeds()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Scan Reviews</button></div>`;
+        c+=`<div style="text-align:center;padding:60px 20px;color:var(--tt)"><div style="font-size:32px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:4px">No devices found</div><div style="font-size:12px;margin-bottom:16px">Tap refresh to scan review feeds</div><button onclick="fetchReviews()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Scan Reviews</button></div>`;
       } else {
-        c+=`<div class="cat-tabs" style="margin-bottom:16px">${REVIEW_CATEGORIES.map(cat=>`<button class="cat-tab${activeReviewCat===cat?' active':''}" data-reviewcat="${cat}">${cat}</button>`).join('')}</div>`;
+        c+=`<div class="cat-tabs" style="margin-bottom:16px">${getReviewCategories().map(cat=>`<button class="cat-tab${activeReviewCat===cat?' active':''}" data-reviewcat="${cat}">${cat}</button>`).join('')}</div>`;
         const totalReviews = devices.reduce((s,d) => s + d.reviewCount, 0);
-        c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="section-label">${devices.length} device${devices.length!==1?'s':''} · ${totalReviews} review${totalReviews!==1?'s':''}</div><button onclick="fetchReviewFeeds()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">${state.reviewsLoading?'Scanning...':'↻ Refresh'}</button></div>`;
+        c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="section-label">${devices.length} device${devices.length!==1?'s':''} · ${totalReviews} review${totalReviews!==1?'s':''}</div><button onclick="fetchReviews()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">${state.reviewsLoading?'Scanning...':'↻ Refresh'}</button></div>`;
         if(devices.length === 0){
           c+=`<div style="text-align:center;padding:40px 20px;color:var(--tt)">No devices in ${activeReviewCat}</div>`;
         } else {
@@ -2550,8 +1979,8 @@ async function init(){
   fetchWeather(); // Start weather fetch (non-blocking)
   try{state.articles=await fetchRSS()}catch(e){console.warn('RSS:',e)}
   state.loading=false;render();
-  // Load reviews: use 24h cache if available, otherwise fetch fresh
-  loadReviewsOnStart();
+  // Load reviews from backend API
+  fetchReviews();
 }
 init();
 </script>
