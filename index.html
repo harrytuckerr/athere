@@ -418,7 +418,8 @@ const state = {
   archive: null, archiveLoading: false, archiveStep: 0,
   weather: null, weatherTs: 0,
   reviewsLoading: false,
-  reviewArticles: [],
+  reviewDevices: [],
+  selectedDevice: null,
 
   richContent: null, richLoading: false, richImages: [],
   fetchSource: null, // 'full' | 'rss' | 'fail'
@@ -509,7 +510,7 @@ function defaultSources() {
 
 const CATEGORIES = ['For You','Tech','Australia','Sport','Photo','World','Auto','Reviews'];
 const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
-const APP_VERSION = 'V21';
+const APP_VERSION = 'V22';
 
 // Post-render: hide decorative images (quote marks, ornaments) based on loaded dimensions
 function cleanupLoadedImages(container) {
@@ -1364,85 +1365,167 @@ function getTldr(article) {
 }
 
 // ============================================================
-// REVIEWS — RSS-based, no API key required
+// REVIEWS — Device-centric aggregated review system
 // ============================================================
+// 1. Fetch review RSS feeds in background
+// 2. Extract device names from article titles
+// 3. Group articles by device → aggregate scores + sources
+// 4. Display trending devices with multi-source review data
+
 const REVIEW_FEEDS = [
-  { name:'The Verge Reviews', feed:'https://www.theverge.com/rss/reviews/index.xml', cat:'Reviews' },
-  { name:'TechRadar Reviews', feed:'https://www.techradar.com/rss/reviews', cat:'Reviews' },
-  { name:'Tom\'s Guide Reviews', feed:'https://www.tomsguide.com/feeds/reviews', cat:'Reviews' },
-  { name:'Wired Gear', feed:'https://www.wired.com/feed/category/gear/latest/rss', cat:'Reviews' },
-  { name:'Ars Technica Reviews', feed:'https://feeds.arstechnica.com/arstechnica/gadgets', cat:'Reviews' },
-  { name:'GSMArena Reviews', feed:'https://www.gsmarena.com/rss-news-reviews.php3', cat:'Reviews' },
-  { name:'PCMag Reviews', feed:'https://www.pcmag.com/rss/reviews', cat:'Reviews' },
-  { name:'DPReview', feed:'https://www.dpreview.com/feeds/news.xml', cat:'Reviews' },
+  { name:'The Verge', feed:'https://www.theverge.com/rss/reviews/index.xml' },
+  { name:'TechRadar', feed:'https://www.techradar.com/rss/reviews' },
+  { name:'Tom\'s Guide', feed:'https://www.tomsguide.com/feeds/reviews' },
+  { name:'Wired', feed:'https://www.wired.com/feed/category/gear/latest/rss' },
+  { name:'Ars Technica', feed:'https://feeds.arstechnica.com/arstechnica/gadgets' },
+  { name:'GSMArena', feed:'https://www.gsmarena.com/rss-news-reviews.php3' },
+  { name:'PCMag', feed:'https://www.pcmag.com/rss/reviews' },
+  { name:'DPReview', feed:'https://www.dpreview.com/feeds/news.xml' },
 ];
-const REVIEW_CATEGORIES = ['All','Phones','Laptops','Cameras','Audio','Gaming','Wearables','Other'];
+
+const REVIEW_CATEGORIES = ['All','Phones','Laptops','Cameras','Audio','Gaming','Wearables'];
 let activeReviewCat = 'All';
 
-function categorizeReview(title) {
-  const t = (title||'').toLowerCase();
-  if (/\b(phone|smartphone|iphone|galaxy\s*s|pixel\s*\d|oneplus|nothing\s*phone|redmi|poco|moto)\b/.test(t)) return 'Phones';
-  if (/\b(laptop|macbook|thinkpad|notebook|chromebook|surface\s*(pro|laptop)|zenbook|xps|spectre)\b/.test(t)) return 'Laptops';
-  if (/\b(camera|lens|mirrorless|dslr|fujifilm|x-t|x100|nikon\s*z|canon\s*(r|eos)|sony\s*a[0-9]|lumix|sigma|leica|hasselblad|dpreview|photography)\b/.test(t)) return 'Cameras';
-  if (/\b(headphone|earbud|airpod|speaker|soundbar|dac|amp|audio|wf-|wh-|buds|earphone|sonos|bose|sennheiser|sony\s*wh)\b/.test(t)) return 'Audio';
-  if (/\b(console|ps5|playstation|xbox|switch|steam\s*deck|gpu|graphics\s*card|gaming\s*(mouse|keyboard|monitor|laptop|headset)|rtx|radeon|rog)\b/.test(t)) return 'Gaming';
-  if (/\b(watch|smartwatch|fitness|tracker|band|garmin|fitbit|apple\s*watch|galaxy\s*watch|ultra\s*2|ring)\b/.test(t)) return 'Wearables';
-  return 'Other';
+// ── Device name extraction from titles ──────────────────────
+// Known brand+product patterns that appear in review titles
+const DEVICE_PATTERNS = [
+  // Phones
+  /\b(Samsung Galaxy [A-Z]\d{1,2}[\w+ ]*(?:Ultra|Plus|FE)?)/i,
+  /\b(Google Pixel \d[\w ]*(?:Pro|a)?)/i,
+  /\b(iPhone \d{1,2}[\w ]*(?:Pro Max|Pro|Plus|e)?)/i,
+  /\b(OnePlus \d{1,2}[\w ]*(?:Pro|T)?)/i,
+  /\b(Nothing Phone \(?\d\)?[\w ]*)/i,
+  /\b(Motorola (?:Edge|Razr)[\w+ ]*)/i,
+  // Laptops
+  /\b(MacBook (?:Air|Pro)[\w ]*(?:M\d[\w ]*)?)(?:\s*\(|$|[\s:,])/i,
+  /\b(ThinkPad [A-Z]\d{1,2}[\w ]*)/i,
+  /\b(Dell XPS \d{1,2}[\w ]*)/i,
+  /\b(HP Spectre[\w ]*)/i,
+  /\b(Surface (?:Pro|Laptop|Go)[\w ]*\d*)/i,
+  /\b(ASUS (?:ZenBook|ROG|TUF|Vivobook)[\w ]*)/i,
+  /\b(Framework Laptop[\w ]*)/i,
+  // Cameras
+  /\b(Fujifilm [A-Z][-\w]+[\w ]*(?:II|III|IV|V)?)/i,
+  /\b(Sony (?:A|Alpha )\d{3,4}[\w ]*(?:II|III|IV|V)?)/i,
+  /\b(Sony (?:ZV-|FX)\w+)/i,
+  /\b(Canon (?:EOS |)R\d{1,2}[\w ]*)/i,
+  /\b(Nikon Z\d{1,2}[\w ]*(?:II|III)?)/i,
+  /\b(Leica [\w]+[\w ]*)/i,
+  /\b(DJI [\w]+[\w ]*\d)/i,
+  /\b(GoPro (?:Hero|Max)[\w ]*\d*)/i,
+  // Audio
+  /\b(AirPods (?:Pro|Max)[\w ]*\d*)/i,
+  /\b(Sony WH-[\w]+)/i,
+  /\b(Sony WF-[\w]+)/i,
+  /\b(Bose (?:QuietComfort|QC)[\w ]*\d*)/i,
+  /\b(Sennheiser (?:Momentum|HD|IE)[\w ]*)/i,
+  /\b(Samsung Galaxy Buds[\w ]*\d*[\w ]*)/i,
+  /\b(Sonos [\w]+[\w ]*)/i,
+  // Gaming
+  /\b(Nintendo Switch[\w ]*\d*)/i,
+  /\b(Steam Deck[\w ]*)/i,
+  /\b(PlayStation (?:5|Portal)[\w ]*)/i,
+  /\b(PS5[\w ]*(?:Pro|Slim)?)/i,
+  /\b(Xbox (?:Series [XS])[\w ]*)/i,
+  /\b(ROG Ally[\w ]*)/i,
+  /\b((?:RTX|GeForce RTX) \d{4}[\w ]*)/i,
+  /\b(Radeon RX \d{4}[\w ]*)/i,
+  // Wearables
+  /\b(Apple Watch (?:Ultra|SE|Series)[\w ]*\d*)/i,
+  /\b(Galaxy Watch[\w ]*\d*[\w ]*)/i,
+  /\b(Garmin [\w]+[\w ]*\d+[\w ]*)/i,
+  /\b(Fitbit [\w]+[\w ]*)/i,
+  /\b(Oura Ring[\w ]*\d*)/i,
+  /\b(Samsung Galaxy Ring[\w ]*)/i,
+  // Tablets
+  /\b(iPad (?:Air|Pro|mini)[\w ]*(?:M\d)?)/i,
+  /\b(Galaxy Tab [A-Z]\d{1,2}[\w ]*)/i,
+];
+
+function extractDeviceName(title) {
+  if (!title) return null;
+  for (const pat of DEVICE_PATTERNS) {
+    const m = title.match(pat);
+    if (m) return m[1].trim().replace(/\s+/g, ' ');
+  }
+  return null;
 }
 
-function isReviewArticle(title) {
-  const t = (title||'').toLowerCase();
-  return /\breview\b|hands[- ]on|first look|vs\.?\s|compared|best\s+(phone|laptop|camera|headphone|earbud|gaming|watch|tablet|monitor|tv|speaker)|buyer'?s?\s*guide|top\s+\d+\s/.test(t);
+function normalizeDevice(name) {
+  return name.toLowerCase()
+    .replace(/\s*\(.*?\)/g, '')     // Remove parentheticals
+    .replace(/\s*(review|hands.on|first.look|preview).*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
+function categorizeDevice(name) {
+  const n = (name||'').toLowerCase();
+  if (/galaxy\s*s|pixel\s*\d|iphone|oneplus|nothing\s*phone|moto|razr|redmi|poco|galaxy\s*a\d/.test(n)) return 'Phones';
+  if (/macbook|thinkpad|xps|spectre|surface\s*(pro|laptop)|zenbook|rog\s*(zephyrus|strix)|vivobook|framework/.test(n)) return 'Laptops';
+  if (/fujifilm|x-t|x-h|x100|sony\s*a\d|alpha|canon\s*(r|eos)|nikon\s*z|leica|dji|gopro|camera|zv-|fx\d/.test(n)) return 'Cameras';
+  if (/airpods|wh-|wf-|buds|headphone|earbud|bose|sennheiser|sonos|speaker|soundbar/.test(n)) return 'Audio';
+  if (/switch|steam\s*deck|playstation|ps5|xbox|rog\s*ally|rtx|radeon|geforce/.test(n)) return 'Gaming';
+  if (/watch|garmin|fitbit|oura|ring|band|tracker/.test(n)) return 'Wearables';
+  return null; // Won't be shown
+}
+
+function extractScore(text) {
+  if (!text) return null;
+  // Match patterns like "8/10", "8.5/10", "Score: 8"
+  const m10 = text.match(/(\d+(?:\.\d+)?)\s*\/\s*10/);
+  if (m10) return parseFloat(m10[1]);
+  // "4/5" or "4.5/5" → convert to /10
+  const m5 = text.match(/(\d+(?:\.\d+)?)\s*\/\s*5/);
+  if (m5) return parseFloat(m5[1]) * 2;
+  // "★★★★" or "⭐⭐⭐⭐"
+  const stars = text.match(/[★⭐]{1,5}/);
+  if (stars) return stars[0].length * 2;
+  return null;
+}
+
+function hashCode(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36);
+}
+
+// ── Fetch + Aggregate ───────────────────────────────────────
 async function fetchReviewFeeds() {
   if (state.reviewsLoading) return;
   state.reviewsLoading = true;
   if (state.activeCat === 'Reviews') render();
-  const results = [];
   
-  // Helper: parse RSS XML into items
+  const rawArticles = []; // All review articles from all feeds
+  
   function parseRssXml(xml, sourceName) {
     try {
       const doc = new DOMParser().parseFromString(xml, 'text/xml');
-      const items = doc.querySelectorAll('item');
-      items.forEach(item => {
+      doc.querySelectorAll('item').forEach(item => {
         const title = item.querySelector('title')?.textContent || '';
         const link = item.querySelector('link')?.textContent || '';
         const desc = item.querySelector('description')?.textContent || '';
         const content = item.querySelector('content\\:encoded')?.textContent || desc;
         const pubDate = item.querySelector('pubDate')?.textContent || '';
-        // Try multiple image sources
-        const mediaContent = item.querySelector('media\\:content, media\\:thumbnail');
+        const mediaEl = item.querySelector('media\\:content, media\\:thumbnail');
         const enclosure = item.querySelector('enclosure');
-        let img = mediaContent?.getAttribute('url') || enclosure?.getAttribute('url') || extractImg(content || desc) || null;
+        let img = mediaEl?.getAttribute('url') || enclosure?.getAttribute('url') || extractImg(content || desc) || null;
         if (img) img = fixImgUrl(img);
-        results.push({
-          id: 'rv-' + hashCode(title + sourceName),
-          title, link,
-          source: sourceName.replace(' Reviews','').replace(' Gear',''),
-          image: img,
-          time: timeAgo(pubDate),
-          date: pubDate,
-          description: stripHtml(desc || content).slice(0, 200),
-          reviewCat: categorizeReview(title),
-          isReview: true,
-        });
+        rawArticles.push({ title, link, source: sourceName, image: img, date: pubDate, desc: stripHtml(desc||content).slice(0,250), fullDesc: desc||content });
       });
-    } catch(e) { console.warn('RSS XML parse error:', sourceName, e); }
+    } catch(e) { console.warn('XML parse error:', sourceName, e); }
   }
   
-  // Fetch via our proxy (XML) first, fallback to rss2json
+  // Fetch feeds (proxy first, rss2json fallback)
   const BATCH = 4;
   for (let i = 0; i < REVIEW_FEEDS.length; i += BATCH) {
     const batch = REVIEW_FEEDS.slice(i, i + BATCH);
     await Promise.allSettled(batch.map(async (rf) => {
+      // Try own proxy first
       try {
-        // Try our own proxy first (returns raw XML)
-        const proxyUrl = `/proxy?url=${encodeURIComponent(rf.feed)}`;
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 8000);
-        let res = await fetch(proxyUrl, { signal: controller.signal });
+        const res = await fetch(`/proxy?url=${encodeURIComponent(rf.feed)}`, { signal: controller.signal });
         clearTimeout(timer);
         if (res.ok) {
           const text = await res.text();
@@ -1459,16 +1542,12 @@ async function fetchReviewFeeds() {
         const d = await r.json();
         if (d.status !== 'ok' || !d.items) return;
         d.items.forEach(item => {
-          const title = item.title || '';
           const img = item.thumbnail || item.enclosure?.link || extractImg(item.description || item.content || '') || null;
-          results.push({
-            id: 'rv-' + hashCode(title + rf.name),
-            title, link: item.link || '',
-            source: rf.name.replace(' Reviews','').replace(' Gear',''),
-            image: img ? fixImgUrl(img) : null,
-            time: timeAgo(item.pubDate), date: item.pubDate,
-            description: stripHtml(item.description || item.content || '').slice(0, 200),
-            reviewCat: categorizeReview(title), isReview: true,
+          rawArticles.push({
+            title: item.title || '', link: item.link || '', source: rf.name,
+            image: img ? fixImgUrl(img) : null, date: item.pubDate,
+            desc: stripHtml(item.description || item.content || '').slice(0, 250),
+            fullDesc: item.description || item.content || '',
           });
         });
       } catch(e) { console.warn('Review feed error:', rf.name, e); }
@@ -1476,28 +1555,119 @@ async function fetchReviewFeeds() {
     if (i + BATCH < REVIEW_FEEDS.length) await new Promise(r => setTimeout(r, 300));
   }
   
-  results.sort((a, b) => new Date(b.date) - new Date(a.date));
-  const seen = new Set();
-  state.reviewArticles = results.filter(r => {
-    const key = r.title.slice(0, 40).toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+  // ── Step 2: Extract devices and group ──────────────────────
+  // Also scan NEWS articles for device mentions (for trending signal)
+  const allArticles = state.articles || [];
+  const newsMentions = {}; // device key → mention count in news
+  allArticles.forEach(a => {
+    const dev = extractDeviceName(a.title);
+    if (dev) {
+      const key = normalizeDevice(dev);
+      newsMentions[key] = (newsMentions[key] || 0) + 1;
+    }
   });
+
+  const deviceMap = {}; // normalized name → device object
+  
+  rawArticles.forEach(article => {
+    const deviceName = extractDeviceName(article.title);
+    if (!deviceName) return; // Skip articles where we can't identify a device
+    
+    const key = normalizeDevice(deviceName);
+    const cat = categorizeDevice(key);
+    if (!cat) return; // Skip uncategorizable devices
+    
+    if (!deviceMap[key]) {
+      deviceMap[key] = {
+        id: 'dev-' + hashCode(key),
+        name: deviceName, // Use first matched (best-cased) name
+        category: cat,
+        reviews: [],
+        image: null,
+        latestDate: null,
+        newsMentions: newsMentions[key] || 0, // How often this device appears in news
+      };
+    }
+    
+    const dev = deviceMap[key];
+    // Keep best-looking name (longest match usually has full model)
+    if (deviceName.length > dev.name.length) dev.name = deviceName;
+    
+    const score = extractScore(article.title + ' ' + article.desc);
+    dev.reviews.push({
+      source: article.source,
+      title: article.title,
+      link: article.link,
+      score,
+      desc: article.desc,
+      date: article.date,
+    });
+    
+    // Use best image available
+    if (article.image && !dev.image) dev.image = article.image;
+    // Track most recent review date
+    const d = new Date(article.date);
+    if (!dev.latestDate || d > dev.latestDate) dev.latestDate = d;
+  });
+  
+  // ── Step 3: Add trending devices from news (even without reviews) ──
+  Object.entries(newsMentions).forEach(([key, count]) => {
+    if (!deviceMap[key] && count >= 2) {
+      // Extract a display name from any news article title
+      const newsArticle = allArticles.find(a => {
+        const d = extractDeviceName(a.title);
+        return d && normalizeDevice(d) === key;
+      });
+      if (newsArticle) {
+        const devName = extractDeviceName(newsArticle.title);
+        const cat = categorizeDevice(key);
+        if (cat) {
+          deviceMap[key] = {
+            id: 'dev-' + hashCode(key),
+            name: devName,
+            category: cat,
+            reviews: [],
+            image: newsArticle.image || null,
+            latestDate: new Date(newsArticle.date || Date.now()),
+            newsMentions: count,
+          };
+        }
+      }
+    }
+  });
+
+  // ── Step 4: Build sorted device list ───────────────────────
+  const devices = Object.values(deviceMap)
+    .map(d => {
+      const scores = d.reviews.map(r => r.score).filter(s => s !== null);
+      scores.sort((a,b) => a - b);
+      const median = scores.length > 0 ? scores[Math.floor(scores.length / 2)] : null;
+      const avg = scores.length > 0 ? +(scores.reduce((a,b) => a+b, 0) / scores.length).toFixed(1) : null;
+      // Trending score: reviews weigh heavily, news mentions add signal
+      const trendScore = d.reviews.length * 3 + (d.newsMentions || 0);
+      return {
+        ...d,
+        reviewCount: d.reviews.length,
+        medianScore: median,
+        avgScore: avg,
+        scoreCount: scores.length,
+        trendScore,
+        time: d.latestDate ? timeAgo(d.latestDate) : 'recently',
+        isTrending: (d.newsMentions || 0) >= 2,
+      };
+    })
+    // Sort: trending score first, then most recent
+    .sort((a, b) => b.trendScore - a.trendScore || (b.latestDate - a.latestDate));
+  
+  state.reviewDevices = devices;
   state.reviewsLoading = false;
   render();
 }
 
-function hashCode(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  return Math.abs(h).toString(36);
-}
-
-function getFilteredReviews() {
-  const all = state.reviewArticles || [];
+function getFilteredDevices() {
+  const all = state.reviewDevices || [];
   if (activeReviewCat === 'All') return all;
-  return all.filter(r => r.reviewCat === activeReviewCat);
+  return all.filter(d => d.category === activeReviewCat);
 }
 
 // ============================================================
@@ -1618,43 +1788,124 @@ function renderFeed(){
     if(state.loading){
       c=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div></div>`;
     } else if(state.activeCat==='Reviews'){
-      const revArticles = state.reviewArticles || [];
-      
-      if(state.reviewsLoading && revArticles.length === 0){
-        c+=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div><div style="font-size:13px;color:var(--tt);margin-top:16px">Loading reviews from ${REVIEW_FEEDS.length} sources...</div></div>`;
-      } else if(revArticles.length === 0){
-        c+=`<div style="text-align:center;padding:60px 20px;color:var(--tt)"><div style="font-size:32px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:4px">No reviews yet</div><div style="font-size:12px;margin-bottom:16px">Tap refresh to load from review feeds</div><button onclick="fetchReviewFeeds()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Load Reviews</button></div>`;
+      // ── Device Detail View ──
+      if(state.selectedDevice) {
+        const dev = state.selectedDevice;
+        const sourceList = dev.reviews.map(r=>r.source).filter((v,i,a)=>a.indexOf(v)===i);
+        const scores = dev.reviews.map(r=>r.score).filter(s=>s!==null);
+
+        c+=`<div style="padding-bottom:8px">`;
+        c+=`<button onclick="state.selectedDevice=null;render()" style="background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 12px;font-family:'DM Sans',sans-serif">← All Devices</button>`;
+        c+=`<div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:16px">`;
+        if(dev.image) c+=`<img src="${esc(dev.image)}" alt="" style="width:100px;height:100px;object-fit:cover;border-radius:14px;flex-shrink:0" onerror="this.style.display='none'">`;
+        c+=`<div style="flex:1;min-width:0">`;
+        c+=`<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:4px">${esc(dev.category)}</div>`;
+        c+=`<div style="font-family:'Instrument Serif',Georgia,serif;font-size:24px;line-height:1.2;color:var(--text);margin-bottom:6px">${esc(dev.name)}</div>`;
+        c+=`<div style="font-size:12px;color:var(--ts)">${dev.reviewCount} review${dev.reviewCount!==1?'s':''} across ${sourceList.length} source${sourceList.length!==1?'s':''}${dev.newsMentions ? ' · ' + dev.newsMentions + ' news mention' + (dev.newsMentions!==1?'s':'') : ''}</div>`;
+        if(dev.isTrending) c+=`<div style="margin-top:4px;font-size:11px;font-weight:600;color:#FF9F0A">🔥 Trending in your news feeds</div>`;
+        c+=`</div></div>`;
+
+        // Score summary
+        if(scores.length > 0) {
+          const sorted = [...scores].sort((a,b)=>a-b);
+          const median = sorted[Math.floor(sorted.length/2)];
+          const avg = +(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1);
+          const lo = sorted[0], hi = sorted[sorted.length-1];
+          const col = median>=8?'#34C759':median>=6?'#FF9F0A':'#FF453A';
+
+          c+=`<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px">`;
+          c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">`;
+          c+=`<div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.04em">Aggregated Score</div>`;
+          c+=`<div style="font-size:28px;font-weight:800;color:${col}">${median}<span style="font-size:14px;font-weight:500;color:var(--tt)">/10</span></div>`;
+          c+=`</div>`;
+          c+=`<div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${median*10}%;background:${col};border-radius:4px"></div></div>`;
+          c+=`<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ts)"><span>Low: ${lo}/10</span><span>Avg: ${avg}/10</span><span>High: ${hi}/10</span></div>`;
+          c+=`</div>`;
+        }
+
+        // Individual reviews
+        if(dev.reviews.length > 0) {
+          c+=`<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">Individual Reviews</div>`;
+          dev.reviews.forEach(r => {
+            const scoreHtml = r.score !== null
+              ? `<span style="font-size:12px;font-weight:700;color:${r.score>=8?'#34C759':r.score>=6?'#FF9F0A':'#FF453A'};margin-left:auto;flex-shrink:0;padding:3px 8px;border-radius:6px;background:${r.score>=8?'rgba(52,199,89,.12)':r.score>=6?'rgba(255,159,10,.12)':'rgba(255,69,58,.12)'}">${r.score}/10</span>`
+              : '';
+            c+=`<a href="${esc(r.link)}" target="_blank" rel="noopener" style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);text-decoration:none;color:inherit">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:11px;color:var(--accent);font-weight:600;margin-bottom:2px">${esc(r.source)}</div>
+                <div style="font-size:14px;color:var(--text);line-height:1.3">${esc(r.title)}</div>
+                ${r.date ? `<div style="font-size:11px;color:var(--tt);margin-top:2px">${timeAgo(new Date(r.date))}</div>` : ''}
+              </div>
+              ${scoreHtml}
+            </a>`;
+          });
+        } else {
+          c+=`<div style="text-align:center;padding:24px;color:var(--tt);font-size:13px;background:var(--card);border-radius:12px;border:1px solid var(--border)">
+            <div style="font-size:24px;margin-bottom:8px">📰</div>
+            <div style="font-weight:600;margin-bottom:4px">Trending — no reviews yet</div>
+            <div>This device is being discussed in your news feeds but hasn't been reviewed in our review sources yet.</div>
+          </div>`;
+        }
+        c+=`</div>`;
+
+      } else {
+      // ── Device List View ──
+      const devices = getFilteredDevices();
+
+      if(state.reviewsLoading && devices.length === 0){
+        c+=`<div style="text-align:center;padding:60px 20px"><div class="loading-dots">${[0,1,2].map(i=>`<div class="loading-dot" style="animation:pulse 1s ${i*.2}s infinite"></div>`).join('')}</div><div style="font-size:13px;color:var(--tt);margin-top:16px">Scanning ${REVIEW_FEEDS.length} sources for trending devices...</div></div>`;
+      } else if(devices.length === 0 && !state.reviewsLoading){
+        c+=`<div style="text-align:center;padding:60px 20px;color:var(--tt)"><div style="font-size:32px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:4px">No devices found</div><div style="font-size:12px;margin-bottom:16px">Tap refresh to scan review feeds</div><button onclick="fetchReviewFeeds()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">Scan Reviews</button></div>`;
       } else {
         // Category filter tabs
         c+=`<div class="cat-tabs" style="margin-bottom:16px">${REVIEW_CATEGORIES.map(cat=>`<button class="cat-tab${activeReviewCat===cat?' active':''}" data-reviewcat="${cat}">${cat}</button>`).join('')}</div>`;
-        
-        const filtered = getFilteredReviews();
-        c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div class="section-label">${filtered.length} article${filtered.length!==1?'s':''} from ${REVIEW_FEEDS.length} sources</div><button onclick="fetchReviewFeeds()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">↻ Refresh</button></div>`;
-        
-        if(filtered.length === 0){
-          c+=`<div style="text-align:center;padding:40px 20px;color:var(--tt)">No reviews in ${activeReviewCat}</div>`;
+
+        const allDevs = getFilteredDevices();
+        const totalReviews = allDevs.reduce((s,d) => s + d.reviewCount, 0);
+        c+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="section-label">${allDevs.length} device${allDevs.length!==1?'s':''} · ${totalReviews} review${totalReviews!==1?'s':''}</div><button onclick="fetchReviewFeeds()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">${state.reviewsLoading?'Scanning...':'↻ Refresh'}</button></div>`;
+
+        if(allDevs.length === 0){
+          c+=`<div style="text-align:center;padding:40px 20px;color:var(--tt)">No devices in ${activeReviewCat}</div>`;
         } else {
-          // Featured first article
-          const f = filtered[0];
-          c+=`<div class="card-featured" data-reviewlink="${esc(f.link)}" style="cursor:pointer">
-            ${f.image?`<img class="card-img" src="${esc(f.image)}" alt="" loading="lazy" onerror="this.style.display='none'">`:''}
-            <div class="card-body"><div class="card-source">${esc(f.source)} · ${esc(f.reviewCat)} · ${esc(f.time)}</div>
-            <div class="card-title">${esc(f.title)}</div>
-            <div style="font-size:13px;color:var(--ts);margin-top:4px;line-height:1.4">${esc(f.description)}</div></div></div>`;
-          
-          // Rest as compact rows
-          filtered.slice(1).forEach(r => {
-            c+=`<div class="card-row" data-reviewlink="${esc(r.link)}" style="display:flex;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer">
-              <div style="flex:1;min-width:0">
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-                  <span class="review-cat-badge" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)">${esc(r.reviewCat)}</span>
-                  <span style="font-size:11px;color:var(--tt)">${esc(r.source)} · ${esc(r.time)}</span>
-                </div>
-                <div style="font-family:'Instrument Serif',Georgia,serif;font-size:17px;line-height:1.25;color:var(--text)">${esc(r.title)}</div>
-                <div style="font-size:12px;color:var(--ts);margin-top:3px;line-height:1.3">${esc(r.description)}</div>
-              </div>
-              ${r.image?`<img src="${esc(r.image)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;flex-shrink:0" loading="lazy" onerror="this.style.display='none'">`:''}
-            </div>`;
+          allDevs.forEach((dev, idx) => {
+            const scoreBar = dev.medianScore !== null
+              ? `<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                  <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden"><div style="height:100%;width:${dev.medianScore*10}%;background:${dev.medianScore>=8?'#34C759':dev.medianScore>=6?'#FF9F0A':'#FF453A'};border-radius:3px"></div></div>
+                  <span style="font-size:14px;font-weight:700;color:${dev.medianScore>=8?'#34C759':dev.medianScore>=6?'#FF9F0A':'#FF453A'};min-width:32px">${dev.medianScore}/10</span>
+                </div>`
+              : '';
+            const sourceList = dev.reviews.map(r => r.source).filter((v,i,a) => a.indexOf(v)===i);
+            const isFeatured = idx === 0;
+
+            if(isFeatured) {
+              const trendBadge = dev.isTrending ? `<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#FF9F0A;background:rgba(255,159,10,.12);padding:2px 6px;border-radius:4px;margin-left:4px">🔥 Trending</span>` : '';
+              c+=`<div class="card" data-device="${esc(dev.id)}" style="margin-bottom:16px;cursor:pointer;border-radius:16px;overflow:hidden;background:var(--card);border:1px solid var(--border)">
+                ${dev.image?`<div style="height:180px;overflow:hidden"><img src="${esc(dev.image)}" alt="" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`:''}
+                <div style="padding:16px">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)">${esc(dev.category)}</span>
+                    <span style="font-size:11px;color:var(--tt)">· ${dev.time}</span>
+                    ${trendBadge}
+                  </div>
+                  <div style="font-family:'Instrument Serif',Georgia,serif;font-size:22px;line-height:1.2;color:var(--text);margin-bottom:4px">${esc(dev.name)}</div>
+                  <div style="font-size:12px;color:var(--ts)">${dev.reviewCount > 0 ? dev.reviewCount + ' review' + (dev.reviewCount!==1?'s':'') + ' · ' + sourceList.join(', ') : dev.newsMentions + ' news mention' + (dev.newsMentions!==1?'s':'')}</div>
+                  ${scoreBar}
+                </div></div>`;
+            } else {
+              const trendBadge = dev.isTrending ? `<span style="font-size:8px;font-weight:700;color:#FF9F0A;margin-left:4px">🔥</span>` : '';
+              c+=`<div class="card" data-device="${esc(dev.id)}" style="display:flex;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer">
+                ${dev.image?`<img src="${esc(dev.image)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:12px;flex-shrink:0" loading="lazy" onerror="this.style.display='none'">`:'<div style="width:64px;height:64px;border-radius:12px;background:var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px">📱</div>'}
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)">${esc(dev.category)}</span>
+                    <span style="font-size:11px;color:var(--tt)">· ${dev.time}</span>
+                    ${trendBadge}
+                  </div>
+                  <div style="font-family:'Instrument Serif',Georgia,serif;font-size:17px;line-height:1.25;color:var(--text)">${esc(dev.name)}</div>
+                  <div style="font-size:11px;color:var(--ts);margin-top:2px">${dev.reviewCount > 0 ? dev.reviewCount + ' review' + (dev.reviewCount!==1?'s':'') + ' · ' + sourceList.slice(0,3).join(', ') + (sourceList.length>3?' +more':'') : dev.newsMentions + ' news mention' + (dev.newsMentions!==1?'s':'')}</div>
+                  ${dev.medianScore !== null ? `<div style="display:flex;align-items:center;gap:6px;margin-top:4px"><div style="width:40px;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:${dev.medianScore*10}%;background:${dev.medianScore>=8?'#34C759':dev.medianScore>=6?'#FF9F0A':'#FF453A'};border-radius:2px"></div></div><span style="font-size:11px;font-weight:700;color:${dev.medianScore>=8?'#34C759':dev.medianScore>=6?'#FF9F0A':'#FF453A'}">${dev.medianScore}/10</span></div>` : ''}
+                </div></div>`;
+            }
           });
         }
       }
@@ -1888,16 +2139,11 @@ function bindEvents(){
     const a=[...state.articles,...state.bookmarks].find(x=>x.id===el.dataset.article);
     if(a)openArticle(a);
   })});
-  document.querySelectorAll('[data-reviewlink]').forEach(el=>{el.addEventListener('click',()=>{
-    const url=el.dataset.reviewlink; if(!url)return;
-    const rev=(state.reviewArticles||[]).find(r=>r.link===url);
-    if(rev){
-      // Open review as article in reader view
-      state.selectedArticle={id:rev.id,title:rev.title,link:rev.link,source:rev.source,image:rev.image,time:rev.time,pw:false,category:'Reviews'};
-      openArticle(rev.link,rev.title,rev.source);
-    } else { window.open(url,'_blank'); }
+  document.querySelectorAll('[data-device]').forEach(el=>{el.addEventListener('click',()=>{
+    const dev=(state.reviewDevices||[]).find(d=>d.id===el.dataset.device);
+    if(dev){ state.selectedDevice=dev; render(); }
   })});
-  document.querySelectorAll('[data-reviewcat]').forEach(el=>{el.addEventListener('click',()=>{activeReviewCat=el.dataset.reviewcat;render()})});
+  document.querySelectorAll('[data-reviewcat]').forEach(el=>{el.addEventListener('click',()=>{activeReviewCat=el.dataset.reviewcat;state.selectedDevice=null;render()})});
 
   // Critic review links — open in-app reader view
   document.querySelectorAll('[data-critic-url]').forEach(el=>{
@@ -2003,15 +2249,15 @@ function bindEvents(){
   if(si){si.addEventListener('input',()=>{
     const q=si.value.toLowerCase();const res=$('#search-results');
     if(q.length<2){res.innerHTML='';return}
-    const revItems=(state.reviewArticles||[]).map(r=>({id:r.id,title:r.title,source:r.source,category:r.reviewCat,link:r.link,image:r.image,time:r.time,isReview:true}));
-    const all=[...state.articles,...revItems];
+    const devItems=(state.reviewDevices||[]).map(d=>({id:d.id,title:d.name,source:d.reviews.map(r=>r.source).filter((v,i,a)=>a.indexOf(v)===i).join(', '),category:d.category,isDevice:true}));
+    const all=[...state.articles,...devItems];
     const m=all.filter(a=>a.title.toLowerCase().includes(q)||a.source?.toLowerCase().includes(q)||a.category?.toLowerCase().includes(q));
     if(!m.length){res.innerHTML=`<div class="search-empty">No results for "${esc(q)}"</div>`;return}
-    res.innerHTML=m.map(a=>`<div class="related-item" data-${a.isReview?'reviewlink="'+esc(a.link)+'"':'article="'+a.id+'"'}><div class="related-source">${esc(a.source)} · ${esc(a.category||'')}</div><div class="related-title">${esc(a.title)}</div></div>`).join('');
+    res.innerHTML=m.map(a=>`<div class="related-item" data-${a.isDevice?'device="'+esc(a.id)+'"':'article="'+a.id+'"'}><div class="related-source">${esc(a.source)} · ${esc(a.category||'')}</div><div class="related-title">${esc(a.title)}</div></div>`).join('');
     res.querySelectorAll('[data-article]').forEach(el=>{el.addEventListener('click',()=>{const a=state.articles.find(x=>x.id===el.dataset.article);if(a){state.showSearch=false;openArticle(a)}})});
-    res.querySelectorAll('[data-reviewlink]').forEach(el=>{el.addEventListener('click',()=>{
-      const url=el.dataset.reviewlink;const rev=(state.reviewArticles||[]).find(r=>r.link===url);
-      if(rev){state.showSearch=false;state.selectedArticle={id:rev.id,title:rev.title,link:rev.link,source:rev.source,image:rev.image,time:rev.time,pw:false,category:'Reviews'};openArticle(rev.link,rev.title,rev.source)}
+    res.querySelectorAll('[data-device]').forEach(el=>{el.addEventListener('click',()=>{
+      const dev=(state.reviewDevices||[]).find(d=>d.id===el.dataset.device);
+      if(dev){state.showSearch=false;state.activeCat='Reviews';state.selectedDevice=dev;render()}
     })});
   })}
 
